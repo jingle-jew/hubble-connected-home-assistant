@@ -45,6 +45,17 @@ that session. It does not guess credentials or weaken camera access controls.
 Some legacy models expose `RTSP` directly on the LAN. That path is detected with
 a bounded `OPTIONS` request and does not require Hubble cloud access.
 
+**After setup, the official Hubble mobile app is not required and may be removed
+from the phone.** Cameras with direct local RTSP support operate entirely over
+the LAN and do not require Hubble cloud access for video. Cameras using the
+Orbweb path still require the Hubble account and Orbweb rendezvous services to
+discover/authenticate the camera and establish the session, but the actual video
+stream is carried directly over the local network.
+
+Uninstalling the mobile app does not remove cameras from the Hubble account.
+Removing a camera from the account may prevent Orbweb-based cameras from working
+with this integration.
+
 ## Requirements
 
 - Home Assistant 2026.8 or newer;
