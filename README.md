@@ -56,11 +56,20 @@ Only a small number of models and firmware versions have been tested. Please
 open a compatibility report rather than assuming all Hubble-branded devices use
 the same protocol.
 
+## Confirmed compatible models
+
+- 0667
+- 1667
+- 3667
+
+These model families have been verified on user-owned cameras. Compatibility
+can still vary by hardware revision, region, and firmware version.
+
 ## Installation
 
 ### HACS custom repository
 
-After this repository is public:
+To install the integration with HACS:
 
 1. Open **HACS > Integrations > Custom repositories**.
 2. Add `https://github.com/jingle-jew/hubble-connected-home-assistant` as an
