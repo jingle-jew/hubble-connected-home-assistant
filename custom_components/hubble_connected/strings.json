@@ -1,0 +1,83 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Hubble Connected is already configured."
+    },
+    "error": {
+      "cloud_cannot_connect": "Unable to connect to the Hubble cloud",
+      "cloud_invalid_auth": "The Hubble cloud rejected the account credentials",
+      "cloud_invalid_response": "The Hubble cloud returned an unsupported response",
+      "invalid_camera_list": "The local camera list is invalid"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "cloud_login": "Hubble account email (optional)",
+          "cloud_password": "Hubble account password",
+          "local_cameras": "Local cameras (Name=IP, separated by commas)",
+          "name": "Integration name"
+        },
+        "description": "Hubble cloud credentials discover your owned cameras and enable native Orbweb LAN video without Android. The local list is optional and improves discovery when a legacy camera is missing from the cloud inventory.",
+        "title": "Hubble Connected"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connectivity": {
+        "name": "Connectivity"
+      }
+    },
+    "select": {
+      "night_vision": {
+        "name": "Night vision",
+        "state": {
+          "auto": "Auto",
+          "off": "Off",
+          "on": "On"
+        }
+      },
+      "video_bitrate_setting": {
+        "name": "Video bitrate setting"
+      }
+    },
+    "sensor": {
+      "temperature": {
+        "name": "Temperature"
+      },
+      "video_bitrate": {
+        "name": "Current video bitrate"
+      },
+      "wifi_strength": {
+        "name": "Wi-Fi strength"
+      }
+    },
+    "switch": {
+      "ceiling_mount": {
+        "name": "Ceiling mount"
+      },
+      "indicator_led": {
+        "name": "Indicator LED"
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "cloud_cannot_connect": "Unable to connect to the Hubble cloud",
+      "cloud_invalid_auth": "The Hubble cloud rejected the account credentials",
+      "cloud_invalid_response": "The Hubble cloud returned an unsupported response",
+      "invalid_camera_list": "The local camera list is invalid"
+    },
+    "step": {
+      "init": {
+        "data": {
+          "cloud_login": "Hubble account email (optional)",
+          "cloud_password": "Hubble account password (leave empty to keep the saved password)",
+          "local_cameras": "Local cameras (Name=IP, separated by commas)"
+        },
+        "description": "Native Orbweb LAN video works without Android for cloud-matched cameras. The local list is optional and helps discover legacy cameras missing from the cloud inventory.",
+        "title": "Hubble cameras"
+      }
+    }
+  }
+}

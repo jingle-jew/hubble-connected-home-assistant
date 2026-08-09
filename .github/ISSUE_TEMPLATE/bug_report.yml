@@ -1,0 +1,79 @@
+name: Bug report
+description: Report a reproducible integration or device compatibility problem
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach raw captures, `.storage` files, credentials, tokens,
+        camera identifiers, MAC addresses, or unredacted network addresses.
+        Report security issues through the private advisory link in SECURITY.md.
+
+  - type: input
+    id: integration_version
+    attributes:
+      label: Integration version
+      placeholder: 0.1.0-beta.1
+    validations:
+      required: true
+
+  - type: input
+    id: home_assistant_version
+    attributes:
+      label: Home Assistant version
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Camera model and firmware
+      description: Do not include serial numbers, registration IDs, or MAC addresses.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Video backend
+      options:
+        - Orbweb LAN
+        - Direct RTSP
+        - Local data only
+        - Unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+      description: Explain what happened and approximately when.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics or logs
+      description: Use integration diagnostics. Review them before posting.
+      render: text
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I reviewed the report and removed all account, camera, and network identifiers.
+          required: true
+        - label: I am testing only devices and accounts I am authorized to access.
+          required: true
