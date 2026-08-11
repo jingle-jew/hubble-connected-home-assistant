@@ -165,9 +165,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
             recovered_cameras: list[HubbleCloudCamera] = []
             try:
                 subscription_camera_ids = (
-                    await cloud_client.async_get_subscription_camera_ids(
-                        cloud_session
-                    )
+                    await cloud_client.async_get_subscription_camera_ids(cloud_session)
                 )
             except HubbleCloudError as err:
                 _LOGGER.warning(
@@ -179,8 +177,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
             for registration_id in subscription_camera_ids:
                 if (
                     registration_id in inventory_ids
-                    or registration_id[2:6]
-                    not in _SUBSCRIPTION_DISCOVERY_MODEL_CODES
+                    or registration_id[2:6] not in _SUBSCRIPTION_DISCOVERY_MODEL_CODES
                 ):
                     continue
                 try:
@@ -194,9 +191,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
                         "Subscription-discovered Hubble 3667 is unavailable: %s",
                         type(err).__name__,
                     )
-            inventory_ids.update(
-                camera.registration_id for camera in recovered_cameras
-            )
+            inventory_ids.update(camera.registration_id for camera in recovered_cameras)
 
             manual_cameras: list[HubbleCloudCamera] = []
             for index, registration_id in enumerate(
@@ -279,9 +274,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
     )
     local_macs = {
         spec.host: (
-            coordinator_data[spec.host].mac
-            if spec.host in coordinator_data
-            else None
+            coordinator_data[spec.host].mac if spec.host in coordinator_data else None
         )
         for spec in local_camera_specs
     }
@@ -295,9 +288,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
     orbweb_auth_passwords = {
         binding.key: binding.auth_password for binding in orbweb_streams
     }
-    orbweb_route_hosts = {
-        binding.key: binding.route_host for binding in orbweb_streams
-    }
+    orbweb_route_hosts = {binding.key: binding.route_host for binding in orbweb_streams}
     orbweb_mappings = (
         OrbwebLanMappingPool(
             async_get_clientsession(hass),

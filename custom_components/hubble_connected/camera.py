@@ -66,8 +66,7 @@ async def async_setup_entry(
                         orbweb_mappings=orbweb_mappings,
                         rtsp_restream=(
                             entry.runtime_data.rtsp_restream
-                            if binding.key
-                            in entry.runtime_data.rtsp_normalization_keys
+                            if binding.key in entry.runtime_data.rtsp_normalization_keys
                             else None
                         ),
                     )

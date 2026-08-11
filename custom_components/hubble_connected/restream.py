@@ -87,7 +87,4 @@ class HubbleRtspRestreamManager:
 
     @staticmethod
     def _ffmpeg_source(source: HubbleRtspEndpoint) -> str:
-        return (
-            f"ffmpeg:{source.url}"
-            "#video=copy#audio=copy#query=log_level=debug"
-        )
+        return f"ffmpeg:{source.url}#video=copy#audio=copy#query=log_level=debug"

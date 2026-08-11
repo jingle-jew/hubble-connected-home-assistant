@@ -55,9 +55,7 @@ def _user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             ),
             vol.Optional(
                 CONF_CLOUD_CAMERA_IDS,
-                default=defaults.get(
-                    CONF_CLOUD_CAMERA_IDS, DEFAULT_CLOUD_CAMERA_IDS
-                ),
+                default=defaults.get(CONF_CLOUD_CAMERA_IDS, DEFAULT_CLOUD_CAMERA_IDS),
             ): str,
         }
     )
@@ -217,9 +215,7 @@ class HubbleConnectedOptionsFlow(OptionsFlow):
                     ),
                     vol.Optional(
                         CONF_CLOUD_CAMERA_IDS,
-                        default=saved(
-                            CONF_CLOUD_CAMERA_IDS, DEFAULT_CLOUD_CAMERA_IDS
-                        ),
+                        default=saved(CONF_CLOUD_CAMERA_IDS, DEFAULT_CLOUD_CAMERA_IDS),
                     ): str,
                 }
             ),

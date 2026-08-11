@@ -124,12 +124,8 @@ not-an-ip 0x1 0x2 02:00:00:00:00:02 * br0
             cloud_mac="020000000002",
         )
         cameras = (
-            types.SimpleNamespace(
-                model_code="0667", mac_address="02:00:00:00:00:01"
-            ),
-            types.SimpleNamespace(
-                model_code="1667", mac_address="02:00:00:00:00:02"
-            ),
+            types.SimpleNamespace(model_code="0667", mac_address="02:00:00:00:00:01"),
+            types.SimpleNamespace(model_code="1667", mac_address="02:00:00:00:00:02"),
         )
 
         selected = discovery.select_image_level_entity_specs(

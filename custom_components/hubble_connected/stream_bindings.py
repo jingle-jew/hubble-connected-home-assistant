@@ -39,9 +39,7 @@ def build_orbweb_stream_bindings(
     bindings: list[HubbleOrbwebStreamBinding] = []
 
     for spec in local_specs:
-        camera_mac = normalize_mac(
-            spec.cloud_mac or local_macs.get(spec.host) or ""
-        )
+        camera_mac = normalize_mac(spec.cloud_mac or local_macs.get(spec.host) or "")
         camera = cloud_by_mac.get(camera_mac)
         if camera is None or camera.registration_id in represented_registration_ids:
             continue

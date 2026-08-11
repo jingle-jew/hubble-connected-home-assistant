@@ -259,8 +259,7 @@ def _parse_camera_record(item: Mapping[str, Any]) -> HubbleCloudCamera:
         sorted(str(key) for key in detail),
         bool(_optional_str(item.get("mac_address"))),
         bool(
-            _optional_str(orbweb.get("sid"))
-            and _optional_str(orbweb.get("password"))
+            _optional_str(orbweb.get("sid")) and _optional_str(orbweb.get("password"))
         ),
     )
 
@@ -375,9 +374,7 @@ class HubbleCloudClient:
             cloud_session,
             registration_id,
             "GET_WIFI_STRENGTH",
-            lambda payload: parse_integer_job(
-                payload, "GET_WIFI_STRENGTH", 0, 100
-            ),
+            lambda payload: parse_integer_job(payload, "GET_WIFI_STRENGTH", 0, 100),
         )
 
     async def async_get_video_bitrate(
@@ -388,9 +385,7 @@ class HubbleCloudClient:
             cloud_session,
             registration_id,
             "GET_VIDEO_BITRATE",
-            lambda payload: parse_integer_job(
-                payload, "GET_VIDEO_BITRATE", 0, 100_000
-            ),
+            lambda payload: parse_integer_job(payload, "GET_VIDEO_BITRATE", 0, 100_000),
         )
 
     async def _async_get_command(

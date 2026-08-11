@@ -55,9 +55,7 @@ class HubbleCloudCameraData:
     error: str | None = None
 
 
-class HubbleCloudCoordinator(
-    DataUpdateCoordinator[dict[str, HubbleCloudCameraData]]
-):
+class HubbleCloudCoordinator(DataUpdateCoordinator[dict[str, HubbleCloudCameraData]]):
     """Poll manual cloud cameras independently from the local camera path."""
 
     def __init__(
@@ -88,9 +86,7 @@ class HubbleCloudCoordinator(
                     errors.append(f"{name}:{type(err).__name__}")
                     return None
 
-            temperature = await read(
-                "temperature", self.client.async_get_temperature
-            )
+            temperature = await read("temperature", self.client.async_get_temperature)
             wifi_strength = await read(
                 "wifi_strength", self.client.async_get_wifi_strength
             )
