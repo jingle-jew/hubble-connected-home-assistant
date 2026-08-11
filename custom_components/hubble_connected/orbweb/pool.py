@@ -12,7 +12,7 @@ from typing import Any
 
 from .identity import OrbwebClientIdentity
 from .lan_client import async_open_lan_rtsp_mapping
-from .port_mapping import OrbwebPortMapping
+from .port_mapping import DEFAULT_REMOTE_RTSP_PORT, OrbwebPortMapping
 from .rendezvous import OrbwebRendezvousClient
 
 SourceAddressResolver = Callable[[str], Awaitable[str]]
@@ -125,7 +125,7 @@ async def _async_relay(
 
 
 class OrbwebLanMappingPool:
-    """Open one loopback RTSP mapping per camera, only when requested."""
+    """Open one multi-port Orbweb mapping per camera, only when requested."""
 
     def __init__(
         self,
@@ -153,7 +153,7 @@ class OrbwebLanMappingPool:
         self._mapping_opener = mapping_opener
         self._identity = identity or OrbwebClientIdentity()
         self._mappings: dict[str, OrbwebPortMapping] = {}
-        self._stable_ports: dict[str, OrbwebStablePort] = {}
+        self._stable_ports: dict[tuple[str, int], OrbwebStablePort] = {}
         self._locks = {host: asyncio.Lock() for host in self._target_ids}
         self._stable_locks = {host: asyncio.Lock() for host in self._target_ids}
         self._closed = False
@@ -218,8 +218,12 @@ class OrbwebLanMappingPool:
             self._mappings[host] = mapping
             return mapping
 
-    async def async_get_stable_mapping(self, host: str) -> OrbwebStablePort:
-        """Return a persistent endpoint backed by renewable Orbweb mappings."""
+    async def async_get_stable_mapping(
+        self,
+        host: str,
+        remote_port: int = DEFAULT_REMOTE_RTSP_PORT,
+    ) -> OrbwebStablePort:
+        """Return a persistent endpoint for one renewable camera-side port."""
         if self._closed:
             raise RuntimeError("Orbweb mapping pool is closed")
         try:
@@ -230,22 +234,30 @@ class OrbwebLanMappingPool:
         async with lock:
             if self._closed:
                 raise RuntimeError("Orbweb mapping pool is closed")
-            stable_port = self._stable_ports.get(host)
+            stable_key = (host, remote_port)
+            stable_port = self._stable_ports.get(stable_key)
             if stable_port is not None and not stable_port.is_closed:
                 return stable_port
-            stable_port = OrbwebStablePort(partial(self._async_connect_upstream, host))
+            stable_port = OrbwebStablePort(
+                partial(self._async_connect_upstream, host, remote_port)
+            )
             await stable_port.async_start()
-            self._stable_ports[host] = stable_port
+            self._stable_ports[stable_key] = stable_port
             return stable_port
 
     async def _async_connect_upstream(
-        self, host: str
+        self,
+        host: str,
+        remote_port: int,
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """Connect a stable client to a current transport, retrying once."""
         for attempt in range(2):
             mapping = await self.async_get_mapping(host)
             try:
-                return await asyncio.open_connection(mapping.host, mapping.port)
+                return await asyncio.open_connection(
+                    mapping.host,
+                    mapping.local_port(remote_port),
+                )
             except OSError:
                 await mapping.async_close()
                 if attempt:

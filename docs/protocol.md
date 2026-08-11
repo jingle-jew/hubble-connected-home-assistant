@@ -28,7 +28,8 @@ The runtime follows the same trust boundaries as the official client:
 4. request Orbweb rendezvous candidates;
 5. negotiate encrypted tunnel key material;
 6. authenticate the mapped camera control service with the per-camera password;
-7. carry RTSP only after those steps succeed.
+7. carry RTSP and verified read-only command traffic only after those steps
+   succeed.
 
 Incorrect account credentials, mismatched identities, malformed responses, and
 camera authentication failures are rejected. Generated client identifiers are
@@ -44,6 +45,7 @@ credentials.
 | returned rendezvous host over TCP | client registration and direct-session signaling | enabled |
 | camera high TCP port | encrypted same-LAN Orbweb tunnel | enabled |
 | camera ports 9001 and 6667 inside the tunnel | camera authentication and RTSP | enabled |
+| camera port 80 inside the tunnel | verified 3667 read-only HTTP getters | enabled |
 | NAT/shunt/relay services | off-LAN fallback | parsed and tested in isolation, disabled at runtime |
 
 Hubble also documents RTMP, HTTP command/file transfer, STUN, and high UDP P2P
@@ -61,6 +63,15 @@ Orbweb tunnel lifetimes can be shorter than a Home Assistant player session.
 The integration exposes a stable loopback RTSP port per camera and replaces the
 encrypted transport behind it. Consumers reconnect to the same local URL rather
 than retaining an expired dynamic mapping.
+
+## 3667 read-only command boundary
+
+The verified 3667 maps its HTTP command service only inside the authenticated
+Orbweb tunnel. The integration sends `value_temperature`, `get_wifi_strength`,
+and `get_video_bitrate` to camera port 80 and validates the HTTP status, response
+prefix, type, range, encoding, and maximum response size. These reads share the
+same renewable Orbweb mapping as RTSP and do not call the Hubble
+`publish_command` job API. The 0667 and 1667 retain their direct LAN HTTP path.
 
 ## Defensive implementation rules
 

@@ -10,6 +10,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 ORBWEB_PATH = (
     Path(__file__).parents[1] / "custom_components" / "hubble_connected" / "orbweb"
@@ -2121,6 +2122,11 @@ class _PoolMapping:
         self.is_closed = False
         self.terminal_error = None
 
+    def local_port(self, remote_port: int) -> int:
+        if remote_port not in {80, 6667}:
+            raise KeyError(remote_port)
+        return self.port + (remote_port - 6667)
+
     async def async_close(self) -> None:
         self.is_closed = True
 
@@ -2262,6 +2268,30 @@ class OrbwebLanMappingPoolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resolved_hosts, ["tat.example.invalid"])
         self.assertEqual(calls[0]["local_addresses"], ("192.0.2.20",))
         self.assertEqual(rendezvous_client.targets, ["private-target"])
+        await mapping_pool.async_close()
+
+    async def test_upstream_connector_selects_requested_camera_port(self) -> None:
+        async def open_mapping(_servers, **_kwargs):
+            return _PoolMapping(45000)
+
+        mapping_pool = pool.OrbwebLanMappingPool(
+            object(),
+            {"camera-key": "private-target"},
+            rendezvous_client=_PoolRendezvousClient(),
+            source_address_resolver=lambda _host: asyncio.sleep(
+                0, result="192.0.2.20"
+            ),
+            mapping_opener=open_mapping,
+        )
+        reader = object()
+        writer = object()
+        connector = AsyncMock(return_value=(reader, writer))
+
+        with patch.object(pool.asyncio, "open_connection", connector):
+            result = await mapping_pool._async_connect_upstream("camera-key", 80)
+
+        self.assertEqual(result, (reader, writer))
+        connector.assert_awaited_once_with("127.0.0.1", 38413)
         await mapping_pool.async_close()
 
 

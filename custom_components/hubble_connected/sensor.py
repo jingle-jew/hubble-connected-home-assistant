@@ -15,7 +15,11 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import HubbleConfigEntry
 from .const import DOMAIN
-from .coordinator import HubbleCloudCoordinator, HubbleLocalCoordinator
+from .coordinator import (
+    HubbleCloudCoordinator,
+    HubbleLocalCoordinator,
+    HubbleOrbwebCommandCoordinator,
+)
 from .entity import HubbleLocalEntity
 
 
@@ -48,22 +52,53 @@ async def async_setup_entry(
         for camera in entry.runtime_data.cloud_command_cameras:
             entities.extend(
                 (
-                    HubbleCloudTemperatureSensor(
-                        cloud_coordinator, camera.registration_id
+                    HubbleCommandTemperatureSensor(
+                        cloud_coordinator,
+                        camera.registration_id,
+                        "cloud_publish_command",
                     ),
-                    HubbleCloudWifiStrengthSensor(
-                        cloud_coordinator, camera.registration_id
+                    HubbleCommandWifiStrengthSensor(
+                        cloud_coordinator,
+                        camera.registration_id,
+                        "cloud_publish_command",
                     ),
-                    HubbleCloudVideoBitrateSensor(
-                        cloud_coordinator, camera.registration_id
+                    HubbleCommandVideoBitrateSensor(
+                        cloud_coordinator,
+                        camera.registration_id,
+                        "cloud_publish_command",
+                    ),
+                )
+            )
+    orbweb_coordinator = entry.runtime_data.orbweb_command_coordinator
+    if orbweb_coordinator is not None:
+        for camera in entry.runtime_data.orbweb_command_cameras:
+            entities.extend(
+                (
+                    HubbleCommandTemperatureSensor(
+                        orbweb_coordinator,
+                        camera.registration_id,
+                        "local_orbweb_http",
+                    ),
+                    HubbleCommandWifiStrengthSensor(
+                        orbweb_coordinator,
+                        camera.registration_id,
+                        "local_orbweb_http",
+                    ),
+                    HubbleCommandVideoBitrateSensor(
+                        orbweb_coordinator,
+                        camera.registration_id,
+                        "local_orbweb_http",
                     ),
                 )
             )
     async_add_entities(entities)
 
 
-class HubbleCloudSensor(CoordinatorEntity[HubbleCloudCoordinator], SensorEntity):
-    """Base sensor read through the official asynchronous cloud command."""
+type HubbleCommandCoordinator = HubbleCloudCoordinator | HubbleOrbwebCommandCoordinator
+
+
+class HubbleCommandSensor(CoordinatorEntity[HubbleCommandCoordinator], SensorEntity):
+    """Base sensor read through a camera command transport."""
 
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -71,12 +106,14 @@ class HubbleCloudSensor(CoordinatorEntity[HubbleCloudCoordinator], SensorEntity)
 
     def __init__(
         self,
-        coordinator: HubbleCloudCoordinator,
+        coordinator: HubbleCommandCoordinator,
         registration_id: str,
         unique_suffix: str,
+        source: str,
     ) -> None:
         super().__init__(coordinator)
         self._registration_id = registration_id
+        self._source = source
         self._attr_unique_id = f"cloud:{registration_id}:{unique_suffix}"
 
     @property
@@ -110,11 +147,11 @@ class HubbleCloudSensor(CoordinatorEntity[HubbleCloudCoordinator], SensorEntity)
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
-        return {"source": "cloud_publish_command"}
+        return {"source": self._source}
 
 
-class HubbleCloudTemperatureSensor(HubbleCloudSensor):
-    """Temperature read through the official asynchronous cloud command."""
+class HubbleCommandTemperatureSensor(HubbleCommandSensor):
+    """Temperature read through a camera command transport."""
 
     _attr_translation_key = "temperature"
     _attr_device_class = SensorDeviceClass.TEMPERATURE
@@ -123,13 +160,16 @@ class HubbleCloudTemperatureSensor(HubbleCloudSensor):
     _value_field = "temperature"
 
     def __init__(
-        self, coordinator: HubbleCloudCoordinator, registration_id: str
+        self,
+        coordinator: HubbleCommandCoordinator,
+        registration_id: str,
+        source: str,
     ) -> None:
-        super().__init__(coordinator, registration_id, "temperature")
+        super().__init__(coordinator, registration_id, "temperature", source)
 
 
-class HubbleCloudWifiStrengthSensor(HubbleCloudSensor):
-    """Wi-Fi quality read through the official asynchronous cloud command."""
+class HubbleCommandWifiStrengthSensor(HubbleCommandSensor):
+    """Wi-Fi quality read through a camera command transport."""
 
     _attr_translation_key = "wifi_strength"
     _attr_native_unit_of_measurement = PERCENTAGE
@@ -138,13 +178,16 @@ class HubbleCloudWifiStrengthSensor(HubbleCloudSensor):
     _value_field = "wifi_strength"
 
     def __init__(
-        self, coordinator: HubbleCloudCoordinator, registration_id: str
+        self,
+        coordinator: HubbleCommandCoordinator,
+        registration_id: str,
+        source: str,
     ) -> None:
-        super().__init__(coordinator, registration_id, "wifi_strength")
+        super().__init__(coordinator, registration_id, "wifi_strength", source)
 
 
-class HubbleCloudVideoBitrateSensor(HubbleCloudSensor):
-    """Video bitrate read through the official asynchronous cloud command."""
+class HubbleCommandVideoBitrateSensor(HubbleCommandSensor):
+    """Video bitrate read through a camera command transport."""
 
     _attr_translation_key = "video_bitrate"
     _attr_native_unit_of_measurement = "kbit/s"
@@ -153,9 +196,12 @@ class HubbleCloudVideoBitrateSensor(HubbleCloudSensor):
     _value_field = "video_bitrate"
 
     def __init__(
-        self, coordinator: HubbleCloudCoordinator, registration_id: str
+        self,
+        coordinator: HubbleCommandCoordinator,
+        registration_id: str,
+        source: str,
     ) -> None:
-        super().__init__(coordinator, registration_id, "video_bitrate")
+        super().__init__(coordinator, registration_id, "video_bitrate", source)
 
 
 class HubbleTemperatureSensor(HubbleLocalEntity, SensorEntity):

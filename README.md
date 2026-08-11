@@ -40,7 +40,9 @@ Home Assistant stream/go2rtc <-- stable RTSP proxy+
 The account is used to obtain the identifiers and per-camera credentials that
 the official client normally uses. The integration then negotiates an encrypted
 Orbweb session and authenticates to the owned camera before carrying RTSP over
-that session. It does not guess credentials or weaken camera access controls.
+that session. On the verified 3667, the same session also carries read-only HTTP
+getters from the camera's mapped port 80. It does not guess credentials or
+weaken camera access controls.
 
 Some legacy models expose `RTSP` directly on the LAN. That path is detected with
 a bounded `OPTIONS` request and does not require Hubble cloud access.
@@ -59,7 +61,8 @@ with this integration.
 ## Requirements
 
 - Home Assistant 2026.8 or newer;
-- Home Assistant and the cameras on the same trusted LAN for Orbweb LAN video;
+- Home Assistant and the cameras on the same trusted LAN for Orbweb LAN video
+  and 3667 getters;
 - a valid Hubble account containing the cameras that require Orbweb;
 - outbound HTTPS access to the official Hubble and Orbweb rendezvous services.
 
@@ -113,10 +116,11 @@ Some owned cameras, including the verified 3667 firmware, can remain absent
 from the account's `devices/own` list while still appearing in the account's
 subscription inventory. The integration automatically recovers those 3667
 identifiers, validates their individual v6 profiles, retrieves their Orbweb
-credentials, and polls temperature, Wi-Fi strength, and video bitrate through
-read-only cloud commands. **Cloud camera identifiers omitted from inventory**
-remains available in the integration options as a manual fallback. Identifiers
-are excluded from diagnostics.
+credentials, and polls temperature, Wi-Fi strength, and video bitrate from the
+camera's HTTP command service through the encrypted same-LAN Orbweb mapping.
+The cloud API is not used to publish those getter commands. **Cloud camera
+identifiers omitted from inventory** remains available in the integration
+options as a manual fallback. Identifiers are excluded from diagnostics.
 
 The integration first matches owned cloud devices against complete entries in
 Home Assistant's ARP table by exact MAC address. Those authenticated cloud
@@ -133,7 +137,7 @@ The integration communicates with:
 - `rdz.orbwebsys.com` and returned Orbweb rendezvous hosts to establish a
   camera session;
 - the cameras directly on the local network;
-- loopback-only RTSP proxy ports inside the Home Assistant host.
+- loopback-only RTSP and command proxy ports inside the Home Assistant host.
 
 It sends no analytics or camera data to this project's maintainer. Credentials,
 camera identifiers, MAC addresses, LAN addresses, RTSP URLs, and names are

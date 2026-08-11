@@ -23,6 +23,49 @@ class HubbleOrbwebStreamBinding:
     auth_password: str = field(repr=False)
 
 
+@dataclass(frozen=True, slots=True)
+class HubbleOrbwebCommandBinding:
+    """Route one 3667 command service through an Orbweb LAN mapping."""
+
+    registration_id: str
+    key: str
+    route_host: str | None
+    target_id: str = field(repr=False)
+    auth_password: str = field(repr=False)
+
+
+def build_orbweb_command_bindings(
+    cameras: tuple[HubbleCloudCamera, ...],
+    local_specs: tuple[HubbleLocalCameraSpec, ...],
+) -> tuple[HubbleOrbwebCommandBinding, ...]:
+    """Build local command routes only for credentialed 3667 cameras."""
+    local_by_mac = {
+        normalize_mac(spec.cloud_mac or ""): spec
+        for spec in local_specs
+        if normalize_mac(spec.cloud_mac or "")
+    }
+    bindings: list[HubbleOrbwebCommandBinding] = []
+    for camera in cameras:
+        if (
+            camera.model_code != "3667"
+            or camera.orbweb_sid is None
+            or camera.orbweb_password is None
+        ):
+            continue
+        spec = local_by_mac.get(normalize_mac(camera.mac_address or ""))
+        key = spec.host if spec is not None else f"cloud:{camera.registration_id}"
+        bindings.append(
+            HubbleOrbwebCommandBinding(
+                registration_id=camera.registration_id,
+                key=key,
+                route_host=spec.host if spec is not None else None,
+                target_id=camera.orbweb_sid,
+                auth_password=camera.orbweb_password,
+            )
+        )
+    return tuple(bindings)
+
+
 def build_orbweb_stream_bindings(
     cloud_cameras: tuple[HubbleCloudCamera, ...],
     local_specs: tuple[HubbleLocalCameraSpec, ...],

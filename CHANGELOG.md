@@ -8,6 +8,8 @@ All notable changes will be documented here.
 - Add stable loopback RTSP endpoints with renewable encrypted transports.
 - Add direct RTSP discovery for compatible legacy cameras.
 - Add temperature, connectivity, Wi-Fi, and bitrate sensors.
+- Read the 3667 temperature, Wi-Fi strength, and video bitrate locally through
+  the authenticated Orbweb mapping instead of cloud `publish_command` jobs.
 - Add verified night-vision, bitrate, indicator-LED, and image-flip controls.
 - Add verified image-brightness and image-contrast sensors and controls for
   compatible local cameras.

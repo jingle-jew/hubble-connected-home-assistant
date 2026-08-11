@@ -33,7 +33,11 @@ from .const import (
     DIRECT_RTSP_USERNAME,
     PLATFORMS,
 )
-from .coordinator import HubbleCloudCoordinator, HubbleLocalCoordinator
+from .coordinator import (
+    HubbleCloudCoordinator,
+    HubbleLocalCoordinator,
+    HubbleOrbwebCommandCoordinator,
+)
 from .discovery import (
     async_discover_cloud_cameras,
     select_image_level_entity_specs,
@@ -46,7 +50,12 @@ from .local import (
 from .orbweb import OrbwebLanMappingPool
 from .restream import HubbleRestreamError, HubbleRtspRestreamManager
 from .rtsp import HubbleRtspEndpoint, async_probe_rtsp_candidates
-from .stream_bindings import HubbleOrbwebStreamBinding, build_orbweb_stream_bindings
+from .stream_bindings import (
+    HubbleOrbwebCommandBinding,
+    HubbleOrbwebStreamBinding,
+    build_orbweb_command_bindings,
+    build_orbweb_stream_bindings,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,8 +69,11 @@ class HubbleRuntimeData:
     image_level_entity_specs: tuple[HubbleLocalCameraSpec, ...]
     local_coordinator: HubbleLocalCoordinator | None
     cloud_coordinator: HubbleCloudCoordinator | None
+    orbweb_command_coordinator: HubbleOrbwebCommandCoordinator | None
     cloud_cameras: tuple[HubbleCloudCamera, ...]
     cloud_command_cameras: tuple[HubbleCloudCamera, ...]
+    orbweb_command_cameras: tuple[HubbleCloudCamera, ...]
+    orbweb_command_bindings: tuple[HubbleOrbwebCommandBinding, ...]
     direct_rtsp_endpoints: dict[str, HubbleRtspEndpoint]
     orbweb_streams: tuple[HubbleOrbwebStreamBinding, ...]
     orbweb_mappings: OrbwebLanMappingPool | None
@@ -131,8 +143,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         )
     )
     cloud_cameras: tuple[HubbleCloudCamera, ...] = ()
+    command_camera_candidates: tuple[HubbleCloudCamera, ...] = ()
     cloud_command_cameras: tuple[HubbleCloudCamera, ...] = ()
+    orbweb_command_cameras: tuple[HubbleCloudCamera, ...] = ()
     cloud_coordinator = None
+    orbweb_command_coordinator = None
+    cloud_client = None
+    cloud_session = None
     cloud_login = entry.options.get(
         CONF_CLOUD_LOGIN, entry.data.get(CONF_CLOUD_LOGIN, "")
     )
@@ -211,16 +228,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
                         index,
                         type(err).__name__,
                     )
-            cloud_command_cameras = (*recovered_cameras, *manual_cameras)
-            cloud_cameras = (*cloud_cameras, *cloud_command_cameras)
-            if cloud_command_cameras:
-                cloud_coordinator = HubbleCloudCoordinator(
-                    hass,
-                    cloud_client,
-                    cloud_session,
-                    cloud_command_cameras,
-                )
-                await cloud_coordinator.async_config_entry_first_refresh()
+            additional_cameras = (*recovered_cameras, *manual_cameras)
+            command_camera_candidates = (
+                *(camera for camera in cloud_cameras if camera.model_code == "3667"),
+                *additional_cameras,
+            )
+            cloud_cameras = (*cloud_cameras, *additional_cameras)
 
             diagnostic_path = Path(hass.config.path("hubble_cloud_structure.json"))
             diagnostic_payload = [
@@ -246,7 +259,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         hass, cloud_cameras, configured_camera_specs
     )
     local_entity_specs = select_local_entity_specs(
-        local_camera_specs, cloud_command_cameras
+        local_camera_specs, command_camera_candidates
     )
     coordinator = None
     if local_entity_specs:
@@ -284,11 +297,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         local_macs,
         direct_rtsp_endpoints,
     )
+    orbweb_command_bindings = build_orbweb_command_bindings(
+        command_camera_candidates,
+        local_camera_specs,
+    )
     orbweb_target_ids = {binding.key: binding.target_id for binding in orbweb_streams}
     orbweb_auth_passwords = {
         binding.key: binding.auth_password for binding in orbweb_streams
     }
     orbweb_route_hosts = {binding.key: binding.route_host for binding in orbweb_streams}
+    for binding in orbweb_command_bindings:
+        orbweb_target_ids[binding.key] = binding.target_id
+        orbweb_auth_passwords[binding.key] = binding.auth_password
+        orbweb_route_hosts[binding.key] = binding.route_host
     orbweb_mappings = (
         OrbwebLanMappingPool(
             async_get_clientsession(hass),
@@ -299,6 +320,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         if orbweb_target_ids
         else None
     )
+    orbweb_command_registration_ids = {
+        binding.registration_id for binding in orbweb_command_bindings
+    }
+    orbweb_command_cameras = tuple(
+        camera
+        for camera in command_camera_candidates
+        if camera.registration_id in orbweb_command_registration_ids
+    )
+    cloud_command_cameras = tuple(
+        camera
+        for camera in command_camera_candidates
+        if camera.registration_id not in orbweb_command_registration_ids
+    )
+    if orbweb_command_cameras and orbweb_mappings is not None:
+        orbweb_command_coordinator = HubbleOrbwebCommandCoordinator(
+            hass,
+            orbweb_mappings,
+            orbweb_command_cameras,
+            orbweb_command_bindings,
+        )
+        await orbweb_command_coordinator.async_config_entry_first_refresh()
+    if cloud_command_cameras and cloud_client is not None and cloud_session is not None:
+        cloud_coordinator = HubbleCloudCoordinator(
+            hass,
+            cloud_client,
+            cloud_session,
+            cloud_command_cameras,
+        )
+        await cloud_coordinator.async_config_entry_first_refresh()
     model_by_target = {
         camera.orbweb_sid: camera.model_code
         for camera in cloud_cameras
@@ -316,8 +366,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         image_level_entity_specs=image_level_entity_specs,
         local_coordinator=coordinator,
         cloud_coordinator=cloud_coordinator,
+        orbweb_command_coordinator=orbweb_command_coordinator,
         cloud_cameras=cloud_cameras,
         cloud_command_cameras=cloud_command_cameras,
+        orbweb_command_cameras=orbweb_command_cameras,
+        orbweb_command_bindings=orbweb_command_bindings,
         direct_rtsp_endpoints=direct_rtsp_endpoints,
         orbweb_streams=orbweb_streams,
         orbweb_mappings=orbweb_mappings,

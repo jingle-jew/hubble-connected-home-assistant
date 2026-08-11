@@ -18,6 +18,9 @@ from .cloud import (
 )
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 from .local import HubbleLocalCameraData, HubbleLocalCameraSpec, HubbleLocalClient
+from .orbweb.commands import HubbleOrbwebCommandClient, HubbleOrbwebCommandError
+from .orbweb.pool import OrbwebLanMappingPool
+from .stream_bindings import HubbleOrbwebCommandBinding
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,8 +47,8 @@ class HubbleLocalCoordinator(DataUpdateCoordinator[dict[str, HubbleLocalCameraDa
 
 
 @dataclass(frozen=True, slots=True)
-class HubbleCloudCameraData:
-    """Latest cloud-command state for a camera missing from inventory."""
+class HubbleCommandCameraData:
+    """Latest state returned by three read-only camera getters."""
 
     camera: HubbleCloudCamera
     temperature: float | None
@@ -55,7 +58,7 @@ class HubbleCloudCameraData:
     error: str | None = None
 
 
-class HubbleCloudCoordinator(DataUpdateCoordinator[dict[str, HubbleCloudCameraData]]):
+class HubbleCloudCoordinator(DataUpdateCoordinator[dict[str, HubbleCommandCameraData]]):
     """Poll manual cloud cameras independently from the local camera path."""
 
     def __init__(
@@ -75,8 +78,8 @@ class HubbleCloudCoordinator(DataUpdateCoordinator[dict[str, HubbleCloudCameraDa
         self.session = session
         self.cameras = {camera.registration_id: camera for camera in cameras}
 
-    async def _async_update_data(self) -> dict[str, HubbleCloudCameraData]:
-        async def update(camera: HubbleCloudCamera) -> HubbleCloudCameraData:
+    async def _async_update_data(self) -> dict[str, HubbleCommandCameraData]:
+        async def update(camera: HubbleCloudCamera) -> HubbleCommandCameraData:
             errors: list[str] = []
 
             async def read(name: str, command):
@@ -93,7 +96,83 @@ class HubbleCloudCoordinator(DataUpdateCoordinator[dict[str, HubbleCloudCameraDa
             video_bitrate = await read(
                 "video_bitrate", self.client.async_get_video_bitrate
             )
-            return HubbleCloudCameraData(
+            return HubbleCommandCameraData(
+                camera=camera,
+                temperature=temperature,
+                wifi_strength=wifi_strength,
+                video_bitrate=video_bitrate,
+                available=any(
+                    value is not None
+                    for value in (temperature, wifi_strength, video_bitrate)
+                ),
+                error=",".join(errors) or None,
+            )
+
+        results = await asyncio.gather(
+            *(update(camera) for camera in self.cameras.values())
+        )
+        return {result.camera.registration_id: result for result in results}
+
+
+class HubbleOrbwebCommandCoordinator(
+    DataUpdateCoordinator[dict[str, HubbleCommandCameraData]]
+):
+    """Poll 3667 getters through the camera's Orbweb-mapped LAN port 80."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        mappings: OrbwebLanMappingPool,
+        cameras: tuple[HubbleCloudCamera, ...],
+        bindings: tuple[HubbleOrbwebCommandBinding, ...],
+    ) -> None:
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_orbweb_commands",
+            update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
+        )
+        self.cameras = {camera.registration_id: camera for camera in cameras}
+        self.bindings = {
+            binding.registration_id: binding for binding in bindings
+        }
+        self.clients = {
+            registration_id: HubbleOrbwebCommandClient(mappings, binding.key)
+            for registration_id, binding in self.bindings.items()
+        }
+
+    async def _async_update_data(self) -> dict[str, HubbleCommandCameraData]:
+        async def update(camera: HubbleCloudCamera) -> HubbleCommandCameraData:
+            client = self.clients[camera.registration_id]
+            errors: list[str] = []
+
+            try:
+                await client.async_prepare()
+            except HubbleOrbwebCommandError as err:
+                return HubbleCommandCameraData(
+                    camera=camera,
+                    temperature=None,
+                    wifi_strength=None,
+                    video_bitrate=None,
+                    available=False,
+                    error=f"transport:{type(err).__name__}",
+                )
+
+            async def read(name: str, command):
+                try:
+                    return await command()
+                except HubbleOrbwebCommandError as err:
+                    errors.append(f"{name}:{type(err).__name__}")
+                    return None
+
+            temperature = await read("temperature", client.async_get_temperature)
+            wifi_strength = await read(
+                "wifi_strength", client.async_get_wifi_strength
+            )
+            video_bitrate = await read(
+                "video_bitrate", client.async_get_video_bitrate
+            )
+            return HubbleCommandCameraData(
                 camera=camera,
                 temperature=temperature,
                 wifi_strength=wifi_strength,

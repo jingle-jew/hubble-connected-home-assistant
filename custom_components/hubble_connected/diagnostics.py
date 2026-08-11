@@ -18,6 +18,7 @@ async def async_get_config_entry_diagnostics(
     orbweb_mappings = entry.runtime_data.orbweb_mappings
     coordinator = entry.runtime_data.local_coordinator
     cloud_coordinator = entry.runtime_data.cloud_coordinator
+    orbweb_command_coordinator = entry.runtime_data.orbweb_command_coordinator
     cloud_macs = {
         normalize_mac(camera.mac_address)
         for camera in entry.runtime_data.cloud_cameras
@@ -95,6 +96,24 @@ async def async_get_config_entry_diagnostics(
             }
             for index, data in enumerate(
                 cloud_coordinator.data.values() if cloud_coordinator else (),
+                start=1,
+            )
+        ],
+        "orbweb_command_cameras": [
+            {
+                "camera_index": index,
+                "model_code": data.camera.model_code,
+                "available": data.available,
+                "temperature_c": data.temperature,
+                "wifi_strength_percent": data.wifi_strength,
+                "video_bitrate_kbit_s": data.video_bitrate,
+                "has_error": data.error is not None,
+                "source": "local_orbweb_http",
+            }
+            for index, data in enumerate(
+                orbweb_command_coordinator.data.values()
+                if orbweb_command_coordinator
+                else (),
                 start=1,
             )
         ],
