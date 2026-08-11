@@ -44,6 +44,8 @@ async def async_get_config_entry_diagnostics(
                     "wifi_connection_state": data.wifi_connection_state,
                     "wifi_strength_percent": data.wifi_strength,
                     "video_bitrate_kbit_s": data.video_bitrate,
+                    "brightness": data.brightness,
+                    "contrast": data.contrast,
                     "indicator_led": data.blink_led,
                     "ceiling_mount": data.flipup,
                     "firmware_version": data.firmware_version,
@@ -73,6 +75,8 @@ async def async_get_config_entry_diagnostics(
             "indicator_led": {"off": 0, "on": 1},
             "night_vision": {"auto": 0, "on": 1, "off": 2},
             "video_bitrate_kbit_s": [100, 200, 300, 400, 600, 800, 1000],
+            "brightness": {"minimum": 1, "maximum": 8, "step": 1},
+            "contrast": {"minimum": 1, "maximum": 8, "step": 1},
         },
         "local_cameras": local_cameras,
         "cloud_command_cameras": [

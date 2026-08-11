@@ -31,6 +31,14 @@
         "name": "Connectivity"
       }
     },
+    "number": {
+      "brightness_setting": {
+        "name": "Image brightness setting"
+      },
+      "contrast_setting": {
+        "name": "Image contrast setting"
+      }
+    },
     "select": {
       "night_vision": {
         "name": "Night vision",
@@ -45,6 +53,12 @@
       }
     },
     "sensor": {
+      "brightness": {
+        "name": "Current image brightness"
+      },
+      "contrast": {
+        "name": "Current image contrast"
+      },
       "temperature": {
         "name": "Temperature"
       },

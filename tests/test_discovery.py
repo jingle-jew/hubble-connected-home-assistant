@@ -110,6 +110,34 @@ not-an-ip 0x1 0x2 02:00:00:00:00:02 * br0
 
         self.assertEqual(selected, (manual, cloud_matched))
 
+    def test_image_controls_use_cloud_model_when_local_metadata_is_missing(
+        self,
+    ) -> None:
+        unsafe = local.HubbleLocalCameraSpec(
+            name="Salon",
+            host="192.168.50.10",
+            cloud_mac="020000000001",
+        )
+        safe = local.HubbleLocalCameraSpec(
+            name="Nursery",
+            host="192.168.50.11",
+            cloud_mac="020000000002",
+        )
+        cameras = (
+            types.SimpleNamespace(
+                model_code="0667", mac_address="02:00:00:00:00:01"
+            ),
+            types.SimpleNamespace(
+                model_code="1667", mac_address="02:00:00:00:00:02"
+            ),
+        )
+
+        selected = discovery.select_image_level_entity_specs(
+            (unsafe, safe), {}, cameras
+        )
+
+        self.assertEqual(selected, (safe,))
+
 
 class HubbleAsyncDiscoveryTests(unittest.IsolatedAsyncioTestCase):
     """Validate conservative discovery without real network traffic."""

@@ -9,4 +9,8 @@ All notable changes will be documented here.
 - Add direct RTSP discovery for compatible legacy cameras.
 - Add temperature, connectivity, Wi-Fi, and bitrate sensors.
 - Add verified night-vision, bitrate, indicator-LED, and image-flip controls.
+- Add verified image-brightness and image-contrast sensors and controls for
+  compatible local cameras.
+- Suppress image controls on the 0667, where changing an image level terminates
+  the direct RTSP service.
 - Redact camera and account identifiers from diagnostics.

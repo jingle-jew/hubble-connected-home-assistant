@@ -31,6 +31,14 @@
         "name": "Connectivité"
       }
     },
+    "number": {
+      "brightness_setting": {
+        "name": "Réglage de la luminosité de l’image"
+      },
+      "contrast_setting": {
+        "name": "Réglage du contraste de l’image"
+      }
+    },
     "select": {
       "night_vision": {
         "name": "Vision nocturne",
@@ -45,6 +53,12 @@
       }
     },
     "sensor": {
+      "brightness": {
+        "name": "Luminosité actuelle de l’image"
+      },
+      "contrast": {
+        "name": "Contraste actuel de l’image"
+      },
       "temperature": {
         "name": "Température"
       },

@@ -34,8 +34,15 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import HubbleCloudCoordinator, HubbleLocalCoordinator
-from .discovery import async_discover_cloud_cameras, select_local_entity_specs
-from .local import HubbleLocalCameraSpec, parse_local_camera_specs
+from .discovery import (
+    async_discover_cloud_cameras,
+    select_image_level_entity_specs,
+    select_local_entity_specs,
+)
+from .local import (
+    HubbleLocalCameraSpec,
+    parse_local_camera_specs,
+)
 from .orbweb import OrbwebLanMappingPool
 from .restream import HubbleRestreamError, HubbleRtspRestreamManager
 from .rtsp import HubbleRtspEndpoint, async_probe_rtsp_candidates
@@ -50,6 +57,7 @@ class HubbleRuntimeData:
 
     local_camera_specs: tuple[HubbleLocalCameraSpec, ...]
     local_entity_specs: tuple[HubbleLocalCameraSpec, ...]
+    image_level_entity_specs: tuple[HubbleLocalCameraSpec, ...]
     local_coordinator: HubbleLocalCoordinator | None
     cloud_coordinator: HubbleCloudCoordinator | None
     cloud_cameras: tuple[HubbleCloudCamera, ...]
@@ -70,7 +78,11 @@ _SUBSCRIPTION_DISCOVERY_MODEL_CODES = frozenset({"3667"})
 _LOCAL_ENTITY_SUFFIXES = frozenset(
     {
         "ceiling_mount",
+        "brightness",
+        "brightness_setting",
         "connectivity",
+        "contrast",
+        "contrast_setting",
         "indicator_led",
         "night_vision",
         "temperature",
@@ -78,6 +90,9 @@ _LOCAL_ENTITY_SUFFIXES = frozenset(
         "video_bitrate_setting",
         "wifi_strength",
     }
+)
+_LOCAL_IMAGE_ENTITY_SUFFIXES = frozenset(
+    {"brightness", "brightness_setting", "contrast", "contrast_setting"}
 )
 
 
@@ -257,6 +272,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         for endpoint in await async_probe_rtsp_candidates(direct_candidates)
     }
     coordinator_data = coordinator.data if coordinator is not None else {}
+    image_level_entity_specs = select_image_level_entity_specs(
+        local_entity_specs,
+        coordinator_data,
+        cloud_cameras,
+    )
     local_macs = {
         spec.host: (
             coordinator_data[spec.host].mac
@@ -302,6 +322,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
     entry.runtime_data = HubbleRuntimeData(
         local_camera_specs=local_camera_specs,
         local_entity_specs=local_entity_specs,
+        image_level_entity_specs=image_level_entity_specs,
         local_coordinator=coordinator,
         cloud_coordinator=cloud_coordinator,
         cloud_cameras=cloud_cameras,
@@ -318,9 +339,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         local_camera_specs,
         local_entity_specs,
     )
+    removed_entities += _remove_unsafe_image_entities(
+        hass,
+        entry,
+        local_entity_specs,
+        image_level_entity_specs,
+    )
     if removed_entities:
         _LOGGER.info(
-            "Removed %d unsupported local entities superseded by cloud polling",
+            "Removed %d unsupported or unsafe local entities",
             removed_entities,
         )
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
@@ -362,6 +389,35 @@ def _remove_suppressed_local_entities(
         f"{host}:{suffix}"
         for host in suppressed_hosts
         for suffix in _LOCAL_ENTITY_SUFFIXES
+    }
+    if not stale_unique_ids:
+        return 0
+
+    registry = er.async_get(hass)
+    removed = 0
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.unique_id not in stale_unique_ids:
+            continue
+        registry.async_remove(entity.entity_id)
+        removed += 1
+    return removed
+
+
+def _remove_unsafe_image_entities(
+    hass: HomeAssistant,
+    entry: HubbleConfigEntry,
+    local_entity_specs: tuple[HubbleLocalCameraSpec, ...],
+    image_level_entity_specs: tuple[HubbleLocalCameraSpec, ...],
+) -> int:
+    """Remove image entities that can terminate video on unsafe models."""
+    safe_hosts = {spec.host for spec in image_level_entity_specs}
+    unsafe_hosts = {
+        spec.host for spec in local_entity_specs if spec.host not in safe_hosts
+    }
+    stale_unique_ids = {
+        f"{host}:{suffix}"
+        for host in unsafe_hosts
+        for suffix in _LOCAL_IMAGE_ENTITY_SUFFIXES
     }
     if not stale_unique_ids:
         return 0

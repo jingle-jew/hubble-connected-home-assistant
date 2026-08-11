@@ -28,6 +28,14 @@ class HubbleLocalProtocolError(HubbleLocalError):
 
 
 ParsedValue = TypeVar("ParsedValue")
+IMAGE_LEVEL_MIN = 1
+IMAGE_LEVEL_MAX = 8
+IMAGE_LEVEL_UNSAFE_MODEL_CODES = frozenset({"0667"})
+
+
+def model_supports_image_level_entities(model_code: str | None) -> bool:
+    """Return whether image controls are safe for a local camera model."""
+    return model_code not in IMAGE_LEVEL_UNSAFE_MODEL_CODES
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +57,8 @@ class HubbleLocalCameraData:
     wifi_strength: int | None
     wifi_connection_state: str | None
     video_bitrate: int | None
+    brightness: int | None
+    contrast: int | None
     blink_led: int | None
     flipup: int | None
     available: bool
@@ -166,6 +176,8 @@ class HubbleLocalClient:
         self._wifi_strength: int | None = None
         self._wifi_connection_state: str | None = None
         self._video_bitrate: int | None = None
+        self._brightness: int | None = None
+        self._contrast: int | None = None
         self._night_vision: int | None = None
         self._blink_led: int | None = None
         self._flipup: int | None = None
@@ -196,6 +208,14 @@ class HubbleLocalClient:
                     "get_video_bitrate", response, 0, 100_000
                 ),
             )
+            self._brightness = await self._async_optional_value(
+                "get_brightness",
+                lambda response: parse_int_value("get_brightness", response, 1, 8),
+            )
+            self._contrast = await self._async_optional_value(
+                "get_contrast",
+                lambda response: parse_int_value("get_contrast", response, 1, 8),
+            )
             self._night_vision = await self._async_optional_value(
                 "get_night_vision",
                 lambda response: parse_int_value("get_night_vision", response, 0, 2),
@@ -217,6 +237,8 @@ class HubbleLocalClient:
                 self._wifi_connection_state,
                 self._wifi_strength,
                 self._video_bitrate,
+                self._brightness,
+                self._contrast,
                 self._night_vision,
                 self._blink_led,
                 self._flipup,
@@ -283,6 +305,8 @@ class HubbleLocalClient:
             wifi_strength=self._wifi_strength,
             wifi_connection_state=self._wifi_connection_state,
             video_bitrate=self._video_bitrate,
+            brightness=self._brightness,
+            contrast=self._contrast,
             blink_led=self._blink_led,
             flipup=self._flipup,
             available=available,
@@ -308,6 +332,20 @@ class HubbleLocalClient:
             raise HubbleLocalConfigError(f"Unsupported video bitrate: {value}")
         await self._async_set_command("set_video_bitrate", value)
         self._video_bitrate = value
+
+    async def async_set_brightness(self, value: int) -> None:
+        """Set the firmware-verified image brightness level."""
+        if not IMAGE_LEVEL_MIN <= value <= IMAGE_LEVEL_MAX:
+            raise HubbleLocalConfigError(f"Unsupported image brightness: {value}")
+        await self._async_set_command("set_brightness", value)
+        self._brightness = value
+
+    async def async_set_contrast(self, value: int) -> None:
+        """Set the firmware-verified image contrast level."""
+        if not IMAGE_LEVEL_MIN <= value <= IMAGE_LEVEL_MAX:
+            raise HubbleLocalConfigError(f"Unsupported image contrast: {value}")
+        await self._async_set_command("set_contrast", value)
+        self._contrast = value
 
     async def async_set_night_vision(self, value: int) -> None:
         """Set night vision mode: 0 auto, 1 on, 2 off."""

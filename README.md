@@ -19,8 +19,8 @@ and Orbweb. Product names are used only to identify compatible devices.
 - direct RTSP support for compatible legacy models;
 - temperature, connectivity, Wi-Fi strength, and video bitrate sensors when
   the camera exposes them;
-- verified controls for night vision, video bitrate, indicator LED, and image
-  flip.
+- verified controls for night vision, video bitrate, image brightness, image
+  contrast, indicator LED, and image flip.
 
 No Android phone, Java browser plugin, separate bridge, camera exploit, firmware
 change, or account-authentication bypass is required.
@@ -146,6 +146,9 @@ See [SECURITY.md](SECURITY.md) before reporting a security problem.
 
 - The Orbweb implementation currently supports the verified direct-LAN TCP
   route. Internet relay fallback is not enabled.
+- Image brightness and contrast entities are suppressed on the 0667 because
+  changing those values terminates its direct RTSP encoder and the tested
+  firmware does not restart the service safely.
 - Tunnel renewal is still being tested across more models and firmware.
 - PTZ, talkback, motion events, and cloud snapshots are not exposed.
 - Temperature units are handled by Home Assistant; no camera-side Celsius /

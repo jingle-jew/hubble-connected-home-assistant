@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from .cloud import HubbleCloudCamera
-from .local import HubbleLocalCameraSpec, HubbleLocalClient, HubbleLocalError
+from .local import (
+    HubbleLocalCameraData,
+    HubbleLocalCameraSpec,
+    HubbleLocalClient,
+    HubbleLocalError,
+    model_supports_image_level_entities,
+)
 
 ARP_PATH = Path("/proc/net/arp")
 LOCAL_PROBE_CONCURRENCY = 12
@@ -63,6 +70,32 @@ def select_local_entity_specs(
         for spec in specs
         if normalize_mac(spec.cloud_mac or "") not in cloud_polled_3667_macs
     )
+
+
+def select_image_level_entity_specs(
+    specs: tuple[HubbleLocalCameraSpec, ...],
+    local_data: Mapping[str, HubbleLocalCameraData],
+    cloud_cameras: tuple[HubbleCloudCamera, ...],
+) -> tuple[HubbleLocalCameraSpec, ...]:
+    """Keep image controls only on models where changes preserve streaming."""
+    cloud_by_mac = {
+        mac: camera
+        for camera in cloud_cameras
+        if (mac := normalize_mac(camera.mac_address or ""))
+    }
+    selected: list[HubbleLocalCameraSpec] = []
+    for spec in specs:
+        data = local_data.get(spec.host)
+        model_code = data.model_code if data is not None else None
+        if model_code is None:
+            mac = normalize_mac(
+                spec.cloud_mac or (data.mac if data is not None else "") or ""
+            )
+            camera = cloud_by_mac.get(mac)
+            model_code = camera.model_code if camera is not None else None
+        if model_supports_image_level_entities(model_code):
+            selected.append(spec)
+    return tuple(selected)
 
 
 async def async_discover_cloud_cameras(

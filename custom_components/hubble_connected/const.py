@@ -21,7 +21,7 @@ DIRECT_RTSP_PATH = "/blinkhd"
 DIRECT_RTSP_USERNAME = "user"
 DIRECT_RTSP_PASSWORD = "pass"
 
-PLATFORMS = ["binary_sensor", "camera", "select", "sensor", "switch"]
+PLATFORMS = ["binary_sensor", "camera", "number", "select", "sensor", "switch"]
 
 BITRATE_OPTIONS = (100, 200, 300, 400, 600, 800, 1000)
 NIGHT_VISION_OPTIONS = {

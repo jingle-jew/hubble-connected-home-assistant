@@ -163,6 +163,8 @@ class HubbleRtspTests(unittest.TestCase):
                     "value_temperature": "value_temperature: 23.74",
                     "get_wifi_strength": "",
                     "get_video_bitrate": "",
+                    "get_brightness": "get_brightness: 4",
+                    "get_contrast": "get_contrast: 5",
                     "get_night_vision": "get_night_vision: 0",
                     "get_blink_led": "get_blink_led: 0",
                     "value_flipup": "value_flipup: 0",
@@ -179,11 +181,59 @@ class HubbleRtspTests(unittest.TestCase):
             self.assertEqual(data.model_code, "3667")
             self.assertIsNone(data.wifi_connection_state)
             self.assertIsNone(data.video_bitrate)
+            self.assertEqual(data.brightness, 4)
+            self.assertEqual(data.contrast, 5)
             self.assertEqual(data.night_vision, 0)
             self.assertEqual(data.blink_led, 0)
             self.assertEqual(data.flipup, 0)
 
         asyncio.run(scenario())
+
+    def test_image_levels_are_read_and_written_with_verified_bounds(self) -> None:
+        class ImageCameraClient(local.HubbleLocalClient):
+            def __init__(self) -> None:
+                super().__init__(
+                    local.HubbleLocalCameraSpec("Nursery", "192.168.50.13")
+                )
+                self.commands: list[tuple[str, str | None]] = []
+
+            async def _async_command(self, command, timeout=5.0, value=None) -> str:
+                del timeout
+                self.commands.append((command, value))
+                return f"{command}: 0"
+
+        async def scenario() -> None:
+            client = ImageCameraClient()
+
+            await client.async_set_brightness(1)
+            await client.async_set_brightness(8)
+            await client.async_set_contrast(1)
+            await client.async_set_contrast(8)
+
+            self.assertEqual(
+                client.commands,
+                [
+                    ("set_brightness", "1"),
+                    ("set_brightness", "8"),
+                    ("set_contrast", "1"),
+                    ("set_contrast", "8"),
+                ],
+            )
+            with self.assertRaises(local.HubbleLocalConfigError):
+                await client.async_set_brightness(0)
+            with self.assertRaises(local.HubbleLocalConfigError):
+                await client.async_set_brightness(9)
+            with self.assertRaises(local.HubbleLocalConfigError):
+                await client.async_set_contrast(0)
+            with self.assertRaises(local.HubbleLocalConfigError):
+                await client.async_set_contrast(9)
+
+        asyncio.run(scenario())
+
+    def test_0667_image_level_entities_are_suppressed(self) -> None:
+        self.assertFalse(local.model_supports_image_level_entities("0667"))
+        self.assertTrue(local.model_supports_image_level_entities("1667"))
+        self.assertTrue(local.model_supports_image_level_entities(None))
 
 
 if __name__ == "__main__":

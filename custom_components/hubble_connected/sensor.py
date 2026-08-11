@@ -36,6 +36,13 @@ async def async_setup_entry(
                     HubbleVideoBitrateSensor(coordinator, spec.host),
                 )
             )
+        for spec in entry.runtime_data.image_level_entity_specs:
+            entities.extend(
+                (
+                    HubbleBrightnessSensor(coordinator, spec.host),
+                    HubbleContrastSensor(coordinator, spec.host),
+                )
+            )
     cloud_coordinator = entry.runtime_data.cloud_coordinator
     if cloud_coordinator is not None:
         for camera in entry.runtime_data.cloud_command_cameras:
@@ -231,3 +238,39 @@ class HubbleVideoBitrateSensor(HubbleLocalEntity, SensorEntity):
             if value is not None:
                 attributes[key] = value
         return attributes
+
+
+class HubbleBrightnessSensor(HubbleLocalEntity, SensorEntity):
+    """Current image brightness level reported by the camera."""
+
+    _attr_translation_key = "brightness"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:brightness-6"
+
+    def __init__(self, coordinator: HubbleLocalCoordinator, host: str) -> None:
+        super().__init__(coordinator, host)
+        self._attr_unique_id = f"{host}:brightness"
+
+    @property
+    def native_value(self) -> int | None:
+        data = self.coordinator.data.get(self._host)
+        return data.brightness if data is not None else None
+
+
+class HubbleContrastSensor(HubbleLocalEntity, SensorEntity):
+    """Current image contrast level reported by the camera."""
+
+    _attr_translation_key = "contrast"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:contrast-circle"
+
+    def __init__(self, coordinator: HubbleLocalCoordinator, host: str) -> None:
+        super().__init__(coordinator, host)
+        self._attr_unique_id = f"{host}:contrast"
+
+    @property
+    def native_value(self) -> int | None:
+        data = self.coordinator.data.get(self._host)
+        return data.contrast if data is not None else None
