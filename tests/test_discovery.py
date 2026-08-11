@@ -62,6 +62,54 @@ not-an-ip 0x1 0x2 02:00:00:00:00:02 * br0
             {"020000000003": "192.168.50.12"},
         )
 
+    def test_cloud_polled_3667_keeps_stream_route_without_local_entities(
+        self,
+    ) -> None:
+        legacy = local.HubbleLocalCameraSpec(
+            name="Nursery",
+            host="192.168.50.11",
+            source="cloud_arp",
+            cloud_mac="020000000002",
+        )
+        cloud_polled = local.HubbleLocalCameraSpec(
+            name="Basement",
+            host="192.168.50.12",
+            source="cloud_arp",
+            cloud_mac="020000000003",
+        )
+        camera = types.SimpleNamespace(
+            model_code="3667",
+            mac_address="02:00:00:00:00:03",
+        )
+
+        selected = discovery.select_local_entity_specs(
+            (legacy, cloud_polled), (camera,)
+        )
+
+        self.assertEqual(selected, (legacy,))
+
+    def test_non_3667_and_manual_specs_keep_local_entities(self) -> None:
+        manual = local.HubbleLocalCameraSpec(
+            name="Manual",
+            host="192.168.50.10",
+        )
+        cloud_matched = local.HubbleLocalCameraSpec(
+            name="Nursery",
+            host="192.168.50.11",
+            source="cloud_arp",
+            cloud_mac="020000000002",
+        )
+        camera = types.SimpleNamespace(
+            model_code="1667",
+            mac_address="02:00:00:00:00:02",
+        )
+
+        selected = discovery.select_local_entity_specs(
+            (manual, cloud_matched), (camera,)
+        )
+
+        self.assertEqual(selected, (manual, cloud_matched))
+
 
 class HubbleAsyncDiscoveryTests(unittest.IsolatedAsyncioTestCase):
     """Validate conservative discovery without real network traffic."""

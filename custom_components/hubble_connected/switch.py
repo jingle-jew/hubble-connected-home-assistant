@@ -26,7 +26,7 @@ async def async_setup_entry(
     if coordinator is None:
         return
     entities: list[SwitchEntity] = []
-    for spec in entry.runtime_data.local_camera_specs:
+    for spec in entry.runtime_data.local_entity_specs:
         entities.extend(
             (
                 HubbleIndicatorLedSwitch(coordinator, spec.host),

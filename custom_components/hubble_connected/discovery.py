@@ -47,6 +47,24 @@ def parse_arp_table(value: str) -> dict[str, str]:
     return entries
 
 
+def select_local_entity_specs(
+    specs: tuple[HubbleLocalCameraSpec, ...],
+    cloud_command_cameras: tuple[HubbleCloudCamera, ...],
+) -> tuple[HubbleLocalCameraSpec, ...]:
+    """Exclude cloud-polled 3667 routes from unsupported local entities."""
+    cloud_polled_3667_macs = {
+        mac
+        for camera in cloud_command_cameras
+        if camera.model_code == "3667"
+        if (mac := normalize_mac(camera.mac_address or ""))
+    }
+    return tuple(
+        spec
+        for spec in specs
+        if normalize_mac(spec.cloud_mac or "") not in cloud_polled_3667_macs
+    )
+
+
 async def async_discover_cloud_cameras(
     hass: Any,
     cameras: tuple[HubbleCloudCamera, ...],

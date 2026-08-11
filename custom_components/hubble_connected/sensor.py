@@ -28,7 +28,7 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.local_coordinator
     entities: list[SensorEntity] = []
     if coordinator is not None:
-        for spec in entry.runtime_data.local_camera_specs:
+        for spec in entry.runtime_data.local_entity_specs:
             entities.extend(
                 (
                     HubbleTemperatureSensor(coordinator, spec.host),

@@ -13,6 +13,7 @@ from homeassistant.components.go2rtc import _DATA_GO2RTC
 from homeassistant.components.go2rtc.const import HA_MANAGED_URL
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .cloud import (
@@ -33,7 +34,7 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import HubbleCloudCoordinator, HubbleLocalCoordinator
-from .discovery import async_discover_cloud_cameras
+from .discovery import async_discover_cloud_cameras, select_local_entity_specs
 from .local import HubbleLocalCameraSpec, parse_local_camera_specs
 from .orbweb import OrbwebLanMappingPool
 from .restream import HubbleRestreamError, HubbleRtspRestreamManager
@@ -48,6 +49,7 @@ class HubbleRuntimeData:
     """Runtime state shared by Hubble Connected entities."""
 
     local_camera_specs: tuple[HubbleLocalCameraSpec, ...]
+    local_entity_specs: tuple[HubbleLocalCameraSpec, ...]
     local_coordinator: HubbleLocalCoordinator | None
     cloud_coordinator: HubbleCloudCoordinator | None
     cloud_cameras: tuple[HubbleCloudCamera, ...]
@@ -65,6 +67,18 @@ _LEGACY_BRIDGE_KEYS = frozenset(
     {"host", "port", "path", "username", "password", "stream_camera_host"}
 )
 _SUBSCRIPTION_DISCOVERY_MODEL_CODES = frozenset({"3667"})
+_LOCAL_ENTITY_SUFFIXES = frozenset(
+    {
+        "ceiling_mount",
+        "connectivity",
+        "indicator_led",
+        "night_vision",
+        "temperature",
+        "video_bitrate",
+        "video_bitrate_setting",
+        "wifi_strength",
+    }
+)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bool:
@@ -221,9 +235,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
     local_camera_specs = await async_discover_cloud_cameras(
         hass, cloud_cameras, configured_camera_specs
     )
+    local_entity_specs = select_local_entity_specs(
+        local_camera_specs, cloud_command_cameras
+    )
     coordinator = None
-    if local_camera_specs:
-        coordinator = HubbleLocalCoordinator(hass, local_camera_specs)
+    if local_entity_specs:
+        coordinator = HubbleLocalCoordinator(hass, local_entity_specs)
         await coordinator.async_config_entry_first_refresh()
     direct_candidates = (
         HubbleRtspEndpoint(
@@ -284,6 +301,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
     rtsp_restream = _create_rtsp_restream(hass, rtsp_normalization_keys)
     entry.runtime_data = HubbleRuntimeData(
         local_camera_specs=local_camera_specs,
+        local_entity_specs=local_entity_specs,
         local_coordinator=coordinator,
         cloud_coordinator=cloud_coordinator,
         cloud_cameras=cloud_cameras,
@@ -294,6 +312,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         rtsp_normalization_keys=rtsp_normalization_keys,
         rtsp_restream=rtsp_restream,
     )
+    removed_entities = _remove_suppressed_local_entities(
+        hass,
+        entry,
+        local_camera_specs,
+        local_entity_specs,
+    )
+    if removed_entities:
+        _LOGGER.info(
+            "Removed %d unsupported local entities superseded by cloud polling",
+            removed_entities,
+        )
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -316,6 +345,35 @@ async def async_unload_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> b
 async def _async_reload_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> None:
     """Reload entities when local camera options change."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _remove_suppressed_local_entities(
+    hass: HomeAssistant,
+    entry: HubbleConfigEntry,
+    local_camera_specs: tuple[HubbleLocalCameraSpec, ...],
+    local_entity_specs: tuple[HubbleLocalCameraSpec, ...],
+) -> int:
+    """Remove obsolete local-only entities while preserving camera entities."""
+    active_hosts = {spec.host for spec in local_entity_specs}
+    suppressed_hosts = {
+        spec.host for spec in local_camera_specs if spec.host not in active_hosts
+    }
+    stale_unique_ids = {
+        f"{host}:{suffix}"
+        for host in suppressed_hosts
+        for suffix in _LOCAL_ENTITY_SUFFIXES
+    }
+    if not stale_unique_ids:
+        return 0
+
+    registry = er.async_get(hass)
+    removed = 0
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.unique_id not in stale_unique_ids:
+            continue
+        registry.async_remove(entity.entity_id)
+        removed += 1
+    return removed
 
 
 def _create_rtsp_restream(
