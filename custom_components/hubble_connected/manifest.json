@@ -3,7 +3,7 @@
   "name": "Hubble Connected",
   "codeowners": ["@jingle-jew"],
   "config_flow": true,
-  "dependencies": ["stream"],
+  "dependencies": ["go2rtc", "stream"],
   "documentation": "https://github.com/jingle-jew/hubble-connected-home-assistant",
   "integration_type": "device",
   "iot_class": "local_polling",

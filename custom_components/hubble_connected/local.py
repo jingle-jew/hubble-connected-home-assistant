@@ -37,6 +37,7 @@ class HubbleLocalCameraSpec:
     name: str
     host: str
     source: str = "manual"
+    cloud_mac: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

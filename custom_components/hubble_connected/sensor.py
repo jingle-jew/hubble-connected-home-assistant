@@ -8,10 +8,14 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import HubbleConfigEntry
-from .coordinator import HubbleLocalCoordinator
+from .const import DOMAIN
+from .coordinator import HubbleCloudCoordinator, HubbleLocalCoordinator
 from .entity import HubbleLocalEntity
 
 
@@ -22,18 +26,129 @@ async def async_setup_entry(
 ) -> None:
     """Set up local measurements for every configured camera."""
     coordinator = entry.runtime_data.local_coordinator
-    if coordinator is None:
-        return
     entities: list[SensorEntity] = []
-    for spec in entry.runtime_data.local_camera_specs:
-        entities.extend(
-            (
-                HubbleTemperatureSensor(coordinator, spec.host),
-                HubbleWifiStrengthSensor(coordinator, spec.host),
-                HubbleVideoBitrateSensor(coordinator, spec.host),
+    if coordinator is not None:
+        for spec in entry.runtime_data.local_camera_specs:
+            entities.extend(
+                (
+                    HubbleTemperatureSensor(coordinator, spec.host),
+                    HubbleWifiStrengthSensor(coordinator, spec.host),
+                    HubbleVideoBitrateSensor(coordinator, spec.host),
+                )
             )
-        )
+    cloud_coordinator = entry.runtime_data.cloud_coordinator
+    if cloud_coordinator is not None:
+        for camera in entry.runtime_data.cloud_command_cameras:
+            entities.extend(
+                (
+                    HubbleCloudTemperatureSensor(
+                        cloud_coordinator, camera.registration_id
+                    ),
+                    HubbleCloudWifiStrengthSensor(
+                        cloud_coordinator, camera.registration_id
+                    ),
+                    HubbleCloudVideoBitrateSensor(
+                        cloud_coordinator, camera.registration_id
+                    ),
+                )
+            )
     async_add_entities(entities)
+
+
+class HubbleCloudSensor(CoordinatorEntity[HubbleCloudCoordinator], SensorEntity):
+    """Base sensor read through the official asynchronous cloud command."""
+
+    _attr_has_entity_name = True
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _value_field: str
+
+    def __init__(
+        self,
+        coordinator: HubbleCloudCoordinator,
+        registration_id: str,
+        unique_suffix: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._registration_id = registration_id
+        self._attr_unique_id = f"cloud:{registration_id}:{unique_suffix}"
+
+    @property
+    def available(self) -> bool:
+        data = self.coordinator.data.get(self._registration_id)
+        return data is not None and getattr(data, self._value_field) is not None
+
+    @property
+    def native_value(self) -> float | int | None:
+        data = self.coordinator.data.get(self._registration_id)
+        return getattr(data, self._value_field) if data is not None else None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        camera = self.coordinator.cameras[self._registration_id]
+        connections = set()
+        if camera.mac_address:
+            connections.add((dr.CONNECTION_NETWORK_MAC, camera.mac_address))
+        model_code = camera.model_code
+        model = "Hubble camera"
+        if model_code and model_code.isdigit():
+            model = f"{model} ({model_code})"
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"cloud:{camera.registration_id}")},
+            connections=connections,
+            name=camera.name,
+            manufacturer="Hubble Connected / Motorola",
+            model=model,
+            sw_version=camera.firmware_version,
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        return {"source": "cloud_publish_command"}
+
+
+class HubbleCloudTemperatureSensor(HubbleCloudSensor):
+    """Temperature read through the official asynchronous cloud command."""
+
+    _attr_translation_key = "temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_suggested_display_precision = 1
+    _value_field = "temperature"
+
+    def __init__(
+        self, coordinator: HubbleCloudCoordinator, registration_id: str
+    ) -> None:
+        super().__init__(coordinator, registration_id, "temperature")
+
+
+class HubbleCloudWifiStrengthSensor(HubbleCloudSensor):
+    """Wi-Fi quality read through the official asynchronous cloud command."""
+
+    _attr_translation_key = "wifi_strength"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:wifi"
+    _value_field = "wifi_strength"
+
+    def __init__(
+        self, coordinator: HubbleCloudCoordinator, registration_id: str
+    ) -> None:
+        super().__init__(coordinator, registration_id, "wifi_strength")
+
+
+class HubbleCloudVideoBitrateSensor(HubbleCloudSensor):
+    """Video bitrate read through the official asynchronous cloud command."""
+
+    _attr_translation_key = "video_bitrate"
+    _attr_native_unit_of_measurement = "kbit/s"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:speedometer"
+    _value_field = "video_bitrate"
+
+    def __init__(
+        self, coordinator: HubbleCloudCoordinator, registration_id: str
+    ) -> None:
+        super().__init__(coordinator, registration_id, "video_bitrate")
 
 
 class HubbleTemperatureSensor(HubbleLocalEntity, SensorEntity):

@@ -52,31 +52,50 @@ async def async_discover_cloud_cameras(
     cameras: tuple[HubbleCloudCamera, ...],
     configured: tuple[HubbleLocalCameraSpec, ...],
 ) -> tuple[HubbleLocalCameraSpec, ...]:
-    """Add only cloud cameras present in ARP and verified over local HTTP."""
+    """Discover owned cloud cameras by MAC and verify unknown ARP neighbors."""
     try:
         arp_text = await hass.async_add_executor_job(ARP_PATH.read_text, "utf-8")
     except OSError:
         return configured
 
     arp_by_mac = parse_arp_table(arp_text)
+    cloud_mac_by_host = {
+        host: mac
+        for camera in cameras
+        if (mac := normalize_mac(camera.mac_address or ""))
+        if (host := arp_by_mac.get(mac))
+    }
+    configured = tuple(
+        spec
+        if spec.cloud_mac or spec.host not in cloud_mac_by_host
+        else HubbleLocalCameraSpec(
+            name=spec.name,
+            host=spec.host,
+            source=spec.source,
+            cloud_mac=cloud_mac_by_host[spec.host],
+        )
+        for spec in configured
+    )
     configured_hosts = {spec.host for spec in configured}
-    cloud_candidates: list[tuple[str, HubbleLocalCameraSpec]] = []
+    discovered: list[HubbleLocalCameraSpec] = []
     for camera in cameras:
         mac = normalize_mac(camera.mac_address or "")
         host = arp_by_mac.get(mac)
         if not host or host in configured_hosts:
             continue
-        cloud_candidates.append(
-            (
-                mac,
-                HubbleLocalCameraSpec(
-                    name=camera.name,
-                    host=host,
-                    source="cloud_arp",
-                ),
+        # The cloud inventory already establishes ownership of this exact MAC.
+        # Preserve that association even when the optional local HTTP command
+        # service is unavailable, so video can still fall back to Orbweb.
+        discovered.append(
+            HubbleLocalCameraSpec(
+                name=camera.name,
+                host=host,
+                source="cloud_arp",
+                cloud_mac=mac,
             )
         )
 
+    discovered_hosts = {spec.host for spec in discovered}
     semaphore = asyncio.Semaphore(LOCAL_PROBE_CONCURRENCY)
 
     async def verify(
@@ -92,12 +111,6 @@ async def async_discover_cloud_cameras(
         except HubbleLocalError:
             return None
         return spec if normalize_mac(local_mac) == expected_mac else None
-
-    cloud_verified = await asyncio.gather(
-        *(verify(*candidate) for candidate in cloud_candidates)
-    )
-    discovered = [spec for spec in cloud_verified if spec is not None]
-    discovered_hosts = {spec.host for spec in discovered}
 
     # Some locally reachable legacy cameras can disappear from every current
     # cloud inventory endpoint. Probe only neighbors already known to the

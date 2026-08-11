@@ -133,6 +133,7 @@ class OrbwebLanMappingPool:
         target_ids: Mapping[str, str],
         *,
         auth_passwords: Mapping[str, str] | None = None,
+        source_route_hosts: Mapping[str, str | None] | None = None,
         rendezvous_client: OrbwebRendezvousClient | None = None,
         source_address_resolver: SourceAddressResolver | None = None,
         mapping_opener: MappingOpener = async_open_lan_rtsp_mapping,
@@ -140,8 +141,11 @@ class OrbwebLanMappingPool:
     ) -> None:
         self._target_ids = dict(target_ids)
         self._auth_passwords = dict(auth_passwords or {})
+        self._source_route_hosts = dict(source_route_hosts or {})
         if not self._auth_passwords.keys() <= self._target_ids.keys():
             raise ValueError("Orbweb password has no matching camera target")
+        if not self._source_route_hosts.keys() <= self._target_ids.keys():
+            raise ValueError("Orbweb route host has no matching camera target")
         self._rendezvous = rendezvous_client or OrbwebRendezvousClient(session)
         self._source_address_resolver = (
             source_address_resolver or async_source_ipv4_address
@@ -160,7 +164,7 @@ class OrbwebLanMappingPool:
 
     @property
     def hosts(self) -> frozenset[str]:
-        """Return local camera hosts with an Orbweb stream identity."""
+        """Return camera keys with an Orbweb stream identity."""
         return frozenset(self._target_ids)
 
     async def async_get_mapping(self, host: str) -> OrbwebPortMapping:
@@ -186,10 +190,20 @@ class OrbwebLanMappingPool:
             if mapping is not None:
                 await mapping.async_close()
 
-            servers, source_address = await asyncio.gather(
-                self._rendezvous.async_get_servers(target_id),
-                self._source_address_resolver(host),
+            route_host = (
+                self._source_route_hosts[host]
+                if host in self._source_route_hosts
+                else host
             )
+            if route_host is None:
+                servers = await self._rendezvous.async_get_servers(target_id)
+                route_host = servers.tat_server
+                source_address = await self._source_address_resolver(route_host)
+            else:
+                servers, source_address = await asyncio.gather(
+                    self._rendezvous.async_get_servers(target_id),
+                    self._source_address_resolver(route_host),
+                )
             mapping_kwargs: dict[str, Any] = {
                 "target_id": target_id,
                 "identity": self._identity,
@@ -255,7 +269,7 @@ class OrbwebLanMappingPool:
 
 
 async def async_source_ipv4_address(remote_host: str) -> str:
-    """Resolve the local IPv4 selected by the kernel route to a camera."""
+    """Resolve the local IPv4 selected by the kernel route to a peer."""
     return await asyncio.to_thread(_source_ipv4_address, remote_host)
 
 

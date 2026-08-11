@@ -15,12 +15,16 @@ from .cloud import (
     HubbleCloudAuthError,
     HubbleCloudCannotConnect,
     HubbleCloudClient,
+    HubbleCloudConfigError,
     HubbleCloudProtocolError,
+    parse_cloud_camera_ids,
 )
 from .const import (
+    CONF_CLOUD_CAMERA_IDS,
     CONF_CLOUD_LOGIN,
     CONF_CLOUD_PASSWORD,
     CONF_LOCAL_CAMERAS,
+    DEFAULT_CLOUD_CAMERA_IDS,
     DEFAULT_LOCAL_CAMERAS,
     DEFAULT_NAME,
     DOMAIN,
@@ -49,6 +53,12 @@ def _user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             ): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
             ),
+            vol.Optional(
+                CONF_CLOUD_CAMERA_IDS,
+                default=defaults.get(
+                    CONF_CLOUD_CAMERA_IDS, DEFAULT_CLOUD_CAMERA_IDS
+                ),
+            ): str,
         }
     )
 
@@ -68,8 +78,17 @@ class HubbleConnectedConfigFlow(ConfigFlow, domain=DOMAIN):
                 parse_local_camera_specs(user_input[CONF_LOCAL_CAMERAS])
             except HubbleLocalConfigError:
                 errors["base"] = "invalid_camera_list"
+            try:
+                cloud_camera_ids = parse_cloud_camera_ids(
+                    user_input.get(CONF_CLOUD_CAMERA_IDS, "")
+                )
+            except HubbleCloudConfigError:
+                cloud_camera_ids = ()
+                errors["base"] = "invalid_cloud_camera_ids"
             cloud_login = user_input.get(CONF_CLOUD_LOGIN, "").strip()
             cloud_password = user_input.get(CONF_CLOUD_PASSWORD, "")
+            if cloud_camera_ids and not cloud_login:
+                errors["base"] = "cloud_credentials_required"
             if cloud_login and not cloud_password:
                 errors["base"] = "cloud_invalid_auth"
             elif cloud_login and not errors:
@@ -79,6 +98,8 @@ class HubbleConnectedConfigFlow(ConfigFlow, domain=DOMAIN):
                         cloud_login, cloud_password
                     )
                     await client.async_get_cameras(session)
+                    for registration_id in cloud_camera_ids:
+                        await client.async_get_camera(session, registration_id)
                 except HubbleCloudAuthError:
                     errors["base"] = "cloud_invalid_auth"
                 except HubbleCloudCannotConnect:
@@ -118,6 +139,13 @@ class HubbleConnectedOptionsFlow(OptionsFlow):
                 parse_local_camera_specs(user_input[CONF_LOCAL_CAMERAS])
             except HubbleLocalConfigError:
                 errors["base"] = "invalid_camera_list"
+            try:
+                cloud_camera_ids = parse_cloud_camera_ids(
+                    user_input.get(CONF_CLOUD_CAMERA_IDS, "")
+                )
+            except HubbleCloudConfigError:
+                cloud_camera_ids = ()
+                errors["base"] = "invalid_cloud_camera_ids"
             if not errors:
                 cloud_login = user_input.get(CONF_CLOUD_LOGIN, "").strip()
                 cloud_password = user_input.get(CONF_CLOUD_PASSWORD, "")
@@ -128,6 +156,8 @@ class HubbleConnectedOptionsFlow(OptionsFlow):
                     )
                 if cloud_login and not cloud_password:
                     errors["base"] = "cloud_invalid_auth"
+                elif cloud_camera_ids and not cloud_login:
+                    errors["base"] = "cloud_credentials_required"
                 elif cloud_login:
                     client = HubbleCloudClient(async_get_clientsession(self.hass))
                     try:
@@ -135,6 +165,8 @@ class HubbleConnectedOptionsFlow(OptionsFlow):
                             cloud_login, cloud_password
                         )
                         await client.async_get_cameras(session)
+                        for registration_id in cloud_camera_ids:
+                            await client.async_get_camera(session, registration_id)
                     except HubbleCloudAuthError:
                         errors["base"] = "cloud_invalid_auth"
                     except HubbleCloudCannotConnect:
@@ -183,6 +215,12 @@ class HubbleConnectedOptionsFlow(OptionsFlow):
                             type=selector.TextSelectorType.PASSWORD
                         )
                     ),
+                    vol.Optional(
+                        CONF_CLOUD_CAMERA_IDS,
+                        default=saved(
+                            CONF_CLOUD_CAMERA_IDS, DEFAULT_CLOUD_CAMERA_IDS
+                        ),
+                    ): str,
                 }
             ),
             errors=errors,

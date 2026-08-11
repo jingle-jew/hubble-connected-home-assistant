@@ -109,9 +109,21 @@ the cloud inventory. Its format is:
 Nursery=<camera-ip>, Office=<camera-ip>
 ```
 
+Some owned cameras, including the verified 3667 firmware, can remain absent
+from the account's `devices/own` list while still appearing in the account's
+subscription inventory. The integration automatically recovers those 3667
+identifiers, validates their individual v6 profiles, retrieves their Orbweb
+credentials, and polls temperature, Wi-Fi strength, and video bitrate through
+read-only cloud commands. **Cloud camera identifiers omitted from inventory**
+remains available in the integration options as a manual fallback. Identifiers
+are excluded from diagnostics.
+
 The integration first matches owned cloud devices against complete entries in
-Home Assistant's ARP table. It verifies every candidate with a read-only Hubble
-getter and does not scan an entire subnet.
+Home Assistant's ARP table by exact MAC address. Those authenticated cloud
+matches remain eligible for Orbweb video even when the optional local HTTP
+getter is unavailable. ARP neighbors absent from the cloud inventory are still
+accepted only when a read-only Hubble getter confirms the same MAC address. The
+integration does not scan an entire subnet.
 
 ## Privacy and network use
 

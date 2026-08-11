@@ -7,9 +7,11 @@ DOMAIN = "hubble_connected"
 CONF_LOCAL_CAMERAS = "local_cameras"
 CONF_CLOUD_LOGIN = "cloud_login"
 CONF_CLOUD_PASSWORD = "cloud_password"
+CONF_CLOUD_CAMERA_IDS = "cloud_camera_ids"
 
 DEFAULT_NAME = "Hubble camera"
 DEFAULT_LOCAL_CAMERAS = ""
+DEFAULT_CLOUD_CAMERA_IDS = ""
 DEFAULT_SCAN_INTERVAL = 60
 
 # Verified legacy Hubble LAN RTSP service. Discovery only sends OPTIONS and

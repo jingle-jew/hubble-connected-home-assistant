@@ -2234,6 +2234,36 @@ class OrbwebLanMappingPoolTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RuntimeError):
             await mapping_pool.async_get_mapping("192.0.2.10")
 
+    async def test_cloud_key_routes_source_via_rendezvous_server(self) -> None:
+        rendezvous_client = _PoolRendezvousClient()
+        resolved_hosts: list[str] = []
+        calls: list[dict] = []
+
+        async def resolve_source(host: str) -> str:
+            resolved_hosts.append(host)
+            return "192.0.2.20"
+
+        async def open_mapping(servers, **kwargs):
+            calls.append({"servers": servers, **kwargs})
+            return _PoolMapping(45000)
+
+        mapping_pool = pool.OrbwebLanMappingPool(
+            object(),
+            {"cloud:registration-1": "private-target"},
+            auth_passwords={"cloud:registration-1": "camera-secret"},
+            source_route_hosts={"cloud:registration-1": None},
+            rendezvous_client=rendezvous_client,
+            source_address_resolver=resolve_source,
+            mapping_opener=open_mapping,
+        )
+
+        await mapping_pool.async_get_mapping("cloud:registration-1")
+
+        self.assertEqual(resolved_hosts, ["tat.example.invalid"])
+        self.assertEqual(calls[0]["local_addresses"], ("192.0.2.20",))
+        self.assertEqual(rendezvous_client.targets, ["private-target"])
+        await mapping_pool.async_close()
+
 
 def _host_nic_response_payload(
     target_id: str,

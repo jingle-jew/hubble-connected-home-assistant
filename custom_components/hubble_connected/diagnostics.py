@@ -17,10 +17,16 @@ async def async_get_config_entry_diagnostics(
     direct_endpoints = entry.runtime_data.direct_rtsp_endpoints
     orbweb_mappings = entry.runtime_data.orbweb_mappings
     coordinator = entry.runtime_data.local_coordinator
+    cloud_coordinator = entry.runtime_data.cloud_coordinator
     cloud_macs = {
         normalize_mac(camera.mac_address)
         for camera in entry.runtime_data.cloud_cameras
         if camera.mac_address
+    }
+    discovered_cloud_macs = {
+        normalize_mac(spec.cloud_mac or "")
+        for spec in entry.runtime_data.local_camera_specs
+        if spec.cloud_mac
     }
     local_cameras: list[dict[str, Any]] = []
     if coordinator is not None:
@@ -29,7 +35,10 @@ async def async_get_config_entry_diagnostics(
                 {
                     "camera_index": index,
                     "discovery_source": data.spec.source,
-                    "cloud_match": normalize_mac(data.mac or "") in cloud_macs,
+                    "cloud_match": (
+                        normalize_mac(data.spec.cloud_mac or data.mac or "")
+                        in cloud_macs
+                    ),
                     "available": data.available,
                     "temperature_c": data.temperature,
                     "wifi_connection_state": data.wifi_connection_state,
@@ -66,6 +75,25 @@ async def async_get_config_entry_diagnostics(
             "video_bitrate_kbit_s": [100, 200, 300, 400, 600, 800, 1000],
         },
         "local_cameras": local_cameras,
+        "cloud_command_cameras": [
+            {
+                "camera_index": index,
+                "model_code": (
+                    data.camera.registration_id[2:6]
+                    if len(data.camera.registration_id) >= 6
+                    else None
+                ),
+                "available": data.available,
+                "temperature_c": data.temperature,
+                "wifi_strength_percent": data.wifi_strength,
+                "video_bitrate_kbit_s": data.video_bitrate,
+                "has_error": data.error is not None,
+            }
+            for index, data in enumerate(
+                cloud_coordinator.data.values() if cloud_coordinator else (),
+                start=1,
+            )
+        ],
         "cloud_inventory": [
             {
                 "camera_index": index,
@@ -77,6 +105,10 @@ async def async_get_config_entry_diagnostics(
                 "cloud_temperature_c": camera.cloud_temperature,
                 "setting_keys": sorted(camera.settings),
                 "has_snapshot": bool(camera.snapshot_url),
+                "has_mac": bool(normalize_mac(camera.mac_address or "")),
+                "arp_match": (
+                    normalize_mac(camera.mac_address or "") in discovered_cloud_macs
+                ),
                 "has_orbweb_credentials": camera.has_orbweb_credentials,
             }
             for index, camera in enumerate(entry.runtime_data.cloud_cameras, start=1)

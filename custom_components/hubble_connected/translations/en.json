@@ -5,8 +5,10 @@
     },
     "error": {
       "cloud_cannot_connect": "Unable to connect to the Hubble cloud",
+      "cloud_credentials_required": "Hubble cloud credentials are required for manually added cloud cameras",
       "cloud_invalid_auth": "The Hubble cloud rejected the account credentials",
       "cloud_invalid_response": "The Hubble cloud returned an unsupported response",
+      "invalid_cloud_camera_ids": "The manual cloud camera identifier list is invalid",
       "invalid_camera_list": "The local camera list is invalid"
     },
     "step": {
@@ -14,10 +16,11 @@
         "data": {
           "cloud_login": "Hubble account email (optional)",
           "cloud_password": "Hubble account password",
+          "cloud_camera_ids": "Manual fallback camera identifiers (comma-separated)",
           "local_cameras": "Local cameras (Name=IP, separated by commas)",
           "name": "Integration name"
         },
-        "description": "Hubble cloud credentials discover your owned cameras and enable native Orbweb LAN video without Android. The local list is optional and improves discovery when a legacy camera is missing from the cloud inventory.",
+        "description": "Hubble cloud credentials discover your owned cameras and enable native Orbweb LAN video without Android. Omitted 3667 cameras are recovered automatically from the account subscription inventory. Manual camera identifiers and the local list remain optional fallbacks.",
         "title": "Hubble Connected"
       }
     }
@@ -64,8 +67,10 @@
   "options": {
     "error": {
       "cloud_cannot_connect": "Unable to connect to the Hubble cloud",
+      "cloud_credentials_required": "Hubble cloud credentials are required for manually added cloud cameras",
       "cloud_invalid_auth": "The Hubble cloud rejected the account credentials",
       "cloud_invalid_response": "The Hubble cloud returned an unsupported response",
+      "invalid_cloud_camera_ids": "The manual cloud camera identifier list is invalid",
       "invalid_camera_list": "The local camera list is invalid"
     },
     "step": {
@@ -73,9 +78,10 @@
         "data": {
           "cloud_login": "Hubble account email (optional)",
           "cloud_password": "Hubble account password (leave empty to keep the saved password)",
+          "cloud_camera_ids": "Manual fallback camera identifiers (comma-separated)",
           "local_cameras": "Local cameras (Name=IP, separated by commas)"
         },
-        "description": "Native Orbweb LAN video works without Android for cloud-matched cameras. The local list is optional and helps discover legacy cameras missing from the cloud inventory.",
+        "description": "Native Orbweb LAN video works without Android for cloud-matched cameras. Omitted 3667 cameras are recovered automatically from the account subscription inventory. Manual camera identifiers and the local list remain optional fallbacks.",
         "title": "Hubble cameras"
       }
     }

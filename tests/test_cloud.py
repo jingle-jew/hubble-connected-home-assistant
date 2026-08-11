@@ -54,6 +54,27 @@ class FakeSession:
 class HubbleCloudTests(unittest.TestCase):
     """Validate authentication and inventory parsing contracts."""
 
+    def test_model_code_is_read_from_registration_id(self) -> None:
+        camera = cloud.HubbleCloudCamera(
+            cloud_id=42,
+            name="Basement",
+            registration_id="AA3667-owned-camera",
+            mac_address=None,
+            device_model_id=None,
+            firmware_version=None,
+            status="online",
+            is_available=True,
+            time_zone=None,
+            updated_at=None,
+            snapshot_url=None,
+            network_strength=None,
+            remote_ip=None,
+            cloud_temperature=None,
+            settings={},
+        )
+
+        self.assertEqual(camera.model_code, "3667")
+
     def test_parse_inventory_preserves_stream_and_diagnostic_fields(self) -> None:
         cameras = cloud.parse_camera_inventory(
             {
@@ -132,6 +153,180 @@ class HubbleCloudTests(unittest.TestCase):
             self.assertEqual(kwargs["params"]["api_key"], "t")
 
         asyncio.run(scenario())
+
+    def test_single_camera_uses_v6_to_recover_orbweb_credentials(self) -> None:
+        async def scenario() -> None:
+            registration_id = "01366700000000000000000000"
+            session = FakeSession(
+                [
+                    FakeResponse(
+                        200,
+                        {
+                            "status": "200",
+                            "data": {
+                                "name": "Basement",
+                                "registration_id": registration_id,
+                                "orbweb": {
+                                    "sid": "private-target",
+                                    "password": "private-password",
+                                },
+                            },
+                        },
+                    )
+                ]
+            )
+            client = cloud.HubbleCloudClient(session)
+
+            camera = await client.async_get_camera(
+                cloud.HubbleCloudSession(token="secret-token"), registration_id
+            )
+
+            self.assertTrue(camera.has_orbweb_credentials)
+            self.assertIn("/v6/devices/", session.requests[0][1])
+            self.assertNotIn("private-password", repr(camera))
+
+        asyncio.run(scenario())
+
+    def test_subscription_inventory_exposes_camera_omitted_from_own(self) -> None:
+        async def scenario() -> None:
+            omitted_id = "01366700000000000000000000"
+            session = FakeSession(
+                [
+                    FakeResponse(
+                        200,
+                        {
+                            "status": "200",
+                            "data": {
+                                "devices": [
+                                    {
+                                        "name": "Basement",
+                                        "plan_id": "free",
+                                        "registration_id": omitted_id,
+                                    },
+                                    {
+                                        "name": "Duplicate",
+                                        "plan_id": "free",
+                                        "registration_id": omitted_id,
+                                    },
+                                ]
+                            },
+                        },
+                    )
+                ]
+            )
+            client = cloud.HubbleCloudClient(session)
+
+            identifiers = await client.async_get_subscription_camera_ids(
+                cloud.HubbleCloudSession(token="secret-token")
+            )
+
+            self.assertEqual(identifiers, (omitted_id,))
+            method, url, kwargs = session.requests[0]
+            self.assertEqual(method, "get")
+            self.assertEqual(
+                url,
+                "https://api.hubble.in/v2/devices/subscriptions",
+            )
+            self.assertEqual(kwargs["params"]["api_key"], "secret-token")
+
+        asyncio.run(scenario())
+
+    def test_subscription_inventory_rejects_missing_device_list(self) -> None:
+        with self.assertRaises(cloud.HubbleCloudProtocolError):
+            cloud.parse_subscription_camera_ids(
+                {"status": "200", "data": {"plan_device_availability": {}}}
+            )
+
+    def test_parse_single_camera_omitted_from_inventory(self) -> None:
+        camera = cloud.parse_camera(
+            {
+                "status": "200",
+                "data": {
+                    "id": 43,
+                    "name": "Basement",
+                    "registration_id": "01366700000000000000000000",
+                    "mac_address": "02:00:00:00:00:02",
+                    "firmware_version": "03.40.00",
+                    "device_model_id": 901,
+                    "attributes": {"p2p_protocol": "04_00"},
+                },
+            }
+        )
+
+        self.assertEqual(camera.name, "Basement")
+        self.assertEqual(camera.registration_id[2:6], "3667")
+        self.assertFalse(camera.has_orbweb_credentials)
+
+    def test_parse_cloud_camera_ids_rejects_duplicates_and_bad_values(self) -> None:
+        self.assertEqual(
+            cloud.parse_cloud_camera_ids("camera123,\ncamera456"),
+            ("camera123", "camera456"),
+        )
+        with self.assertRaises(cloud.HubbleCloudConfigError):
+            cloud.parse_cloud_camera_ids("camera123,camera123")
+        with self.assertRaises(cloud.HubbleCloudConfigError):
+            cloud.parse_cloud_camera_ids("not/a/camera")
+
+    def test_temperature_command_follows_job_until_complete(self) -> None:
+        async def scenario() -> None:
+            session = FakeSession(
+                [
+                    FakeResponse(
+                        202,
+                        {
+                            "id": "job_12345678",
+                            "responsePojo": {"status": 202},
+                        },
+                    ),
+                    FakeResponse(202, {"data": {"status": "202"}}),
+                    FakeResponse(
+                        200,
+                        {
+                            "data": {
+                                "status": "200",
+                                "output": {
+                                    "DeviceResponseMessage": (
+                                        "value_temperature: 24.21"
+                                    )
+                                },
+                            }
+                        },
+                    ),
+                ]
+            )
+            client = cloud.HubbleCloudClient(session, job_poll_interval=0)
+            auth = cloud.HubbleCloudSession(token="secret-token")
+
+            temperature = await client.async_get_temperature(
+                auth, "01366700000000000000000000"
+            )
+
+            self.assertEqual(temperature, 24.21)
+            method, url, kwargs = session.requests[0]
+            self.assertEqual(method, "post")
+            self.assertTrue(url.endswith("/publish_command.json"))
+            self.assertEqual(kwargs["json"]["command"], "VALUE_TEMPERATURE")
+            self.assertIsNone(kwargs["json"]["attributes"])
+            self.assertEqual(session.requests[1][0], "get")
+            self.assertIn("/v1/jobs/", session.requests[1][1])
+
+        asyncio.run(scenario())
+
+    def test_integer_command_job_requires_matching_prefix_and_range(self) -> None:
+        payload = {
+            "data": {
+                "status": "200",
+                "output": {"DeviceResponseMessage": "get_wifi_strength: 85"},
+            }
+        }
+        self.assertEqual(
+            cloud.parse_integer_job(payload, "GET_WIFI_STRENGTH", 0, 100),
+            85,
+        )
+        with self.assertRaises(cloud.HubbleCloudProtocolError):
+            cloud.parse_integer_job(payload, "GET_VIDEO_BITRATE", 0, 100_000)
+        with self.assertRaises(cloud.HubbleCloudProtocolError):
+            cloud.parse_integer_job(payload, "GET_WIFI_STRENGTH", 0, 50)
 
     def test_auth_failure_is_distinct_from_transport_failure(self) -> None:
         async def scenario() -> None:

@@ -66,6 +66,94 @@ not-an-ip 0x1 0x2 02:00:00:00:00:02 * br0
 class HubbleAsyncDiscoveryTests(unittest.IsolatedAsyncioTestCase):
     """Validate conservative discovery without real network traffic."""
 
+    async def test_cloud_arp_match_does_not_require_local_http(self) -> None:
+        table = """IP address HW type Flags HW address Mask Device
+192.168.50.12 0x1 0x2 02:00:00:00:00:03 * br0
+"""
+
+        class FakeHass:
+            async def async_add_executor_job(self, _function, *_args):
+                return table
+
+        class FailingClient:
+            def __init__(self, _spec):
+                raise AssertionError(
+                    "Cloud-owned camera must not require an HTTP probe"
+                )
+
+        camera = types.SimpleNamespace(
+            name="Basement",
+            mac_address="02:00:00:00:00:03",
+        )
+        original_client = discovery.HubbleLocalClient
+        discovery.HubbleLocalClient = FailingClient
+        try:
+            specs = await discovery.async_discover_cloud_cameras(
+                FakeHass(), (camera,), ()
+            )
+        finally:
+            discovery.HubbleLocalClient = original_client
+
+        self.assertEqual(len(specs), 1)
+        self.assertEqual(specs[0].host, "192.168.50.12")
+        self.assertEqual(specs[0].source, "cloud_arp")
+        self.assertEqual(specs[0].cloud_mac, "020000000003")
+
+    async def test_manual_camera_inherits_matching_cloud_mac(self) -> None:
+        table = """IP address HW type Flags HW address Mask Device
+192.168.50.12 0x1 0x2 02:00:00:00:00:03 * br0
+"""
+
+        class FakeHass:
+            async def async_add_executor_job(self, _function, *_args):
+                return table
+
+        camera = types.SimpleNamespace(
+            name="Basement",
+            mac_address="02:00:00:00:00:03",
+        )
+        configured = (
+            local.HubbleLocalCameraSpec(
+                name="Manual basement",
+                host="192.168.50.12",
+            ),
+        )
+
+        specs = await discovery.async_discover_cloud_cameras(
+            FakeHass(), (camera,), configured
+        )
+
+        self.assertEqual(len(specs), 1)
+        self.assertEqual(specs[0].name, "Manual basement")
+        self.assertEqual(specs[0].source, "manual")
+        self.assertEqual(specs[0].cloud_mac, "020000000003")
+
+    async def test_unknown_arp_neighbor_still_requires_local_verification(self) -> None:
+        table = """IP address HW type Flags HW address Mask Device
+192.168.50.12 0x1 0x2 02:00:00:00:00:03 * br0
+"""
+
+        class FakeHass:
+            async def async_add_executor_job(self, _function, *_args):
+                return table
+
+        class FailingClient:
+            def __init__(self, spec):
+                self.spec = spec
+
+            async def async_get_mac_address(self, timeout=5.0):
+                del timeout
+                raise local.HubbleLocalCannotConnect("not a Hubble camera")
+
+        original_client = discovery.HubbleLocalClient
+        discovery.HubbleLocalClient = FailingClient
+        try:
+            specs = await discovery.async_discover_cloud_cameras(FakeHass(), (), ())
+        finally:
+            discovery.HubbleLocalClient = original_client
+
+        self.assertEqual(specs, ())
+
     async def test_discovers_hubble_neighbor_missing_from_cloud(self) -> None:
         table = """IP address HW type Flags HW address Mask Device
 192.168.50.1 0x1 0x2 02:00:00:00:00:01 * br0

@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
+from urllib.parse import urljoin
 
+from go2rtc_client import Go2RtcRestClient
+from homeassistant.components.go2rtc import _DATA_GO2RTC
+from homeassistant.components.go2rtc.const import HA_MANAGED_URL
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .cloud import HubbleCloudCamera, HubbleCloudClient, HubbleCloudError
+from .cloud import (
+    HubbleCloudCamera,
+    HubbleCloudClient,
+    HubbleCloudError,
+    parse_cloud_camera_ids,
+)
 from .const import (
+    CONF_CLOUD_CAMERA_IDS,
     CONF_CLOUD_LOGIN,
     CONF_CLOUD_PASSWORD,
     CONF_LOCAL_CAMERAS,
@@ -20,11 +32,13 @@ from .const import (
     DIRECT_RTSP_USERNAME,
     PLATFORMS,
 )
-from .coordinator import HubbleLocalCoordinator
-from .discovery import async_discover_cloud_cameras, normalize_mac
+from .coordinator import HubbleCloudCoordinator, HubbleLocalCoordinator
+from .discovery import async_discover_cloud_cameras
 from .local import HubbleLocalCameraSpec, parse_local_camera_specs
 from .orbweb import OrbwebLanMappingPool
+from .restream import HubbleRestreamError, HubbleRtspRestreamManager
 from .rtsp import HubbleRtspEndpoint, async_probe_rtsp_candidates
+from .stream_bindings import HubbleOrbwebStreamBinding, build_orbweb_stream_bindings
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,9 +49,14 @@ class HubbleRuntimeData:
 
     local_camera_specs: tuple[HubbleLocalCameraSpec, ...]
     local_coordinator: HubbleLocalCoordinator | None
+    cloud_coordinator: HubbleCloudCoordinator | None
     cloud_cameras: tuple[HubbleCloudCamera, ...]
+    cloud_command_cameras: tuple[HubbleCloudCamera, ...]
     direct_rtsp_endpoints: dict[str, HubbleRtspEndpoint]
+    orbweb_streams: tuple[HubbleOrbwebStreamBinding, ...]
     orbweb_mappings: OrbwebLanMappingPool | None
+    rtsp_normalization_keys: frozenset[str]
+    rtsp_restream: HubbleRtspRestreamManager | None
 
 
 type HubbleConfigEntry = ConfigEntry[HubbleRuntimeData]
@@ -45,6 +64,7 @@ type HubbleConfigEntry = ConfigEntry[HubbleRuntimeData]
 _LEGACY_BRIDGE_KEYS = frozenset(
     {"host", "port", "path", "username", "password", "stream_camera_host"}
 )
+_SUBSCRIPTION_DISCOVERY_MODEL_CODES = frozenset({"3667"})
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bool:
@@ -75,7 +95,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
     configured_camera_specs = parse_local_camera_specs(
         entry.options.get(CONF_LOCAL_CAMERAS, entry.data.get(CONF_LOCAL_CAMERAS, ""))
     )
+    configured_cloud_camera_ids = parse_cloud_camera_ids(
+        entry.options.get(
+            CONF_CLOUD_CAMERA_IDS,
+            entry.data.get(CONF_CLOUD_CAMERA_IDS, ""),
+        )
+    )
     cloud_cameras: tuple[HubbleCloudCamera, ...] = ()
+    cloud_command_cameras: tuple[HubbleCloudCamera, ...] = ()
+    cloud_coordinator = None
     cloud_login = entry.options.get(
         CONF_CLOUD_LOGIN, entry.data.get(CONF_CLOUD_LOGIN, "")
     )
@@ -83,16 +111,111 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         CONF_CLOUD_PASSWORD, entry.data.get(CONF_CLOUD_PASSWORD, "")
     )
     if cloud_login and cloud_password:
+        cloud_client = HubbleCloudClient(async_get_clientsession(hass))
         try:
-            cloud_client = HubbleCloudClient(async_get_clientsession(hass))
             cloud_session = await cloud_client.async_authenticate(
                 cloud_login, cloud_password
             )
-            cloud_cameras = await cloud_client.async_get_cameras(cloud_session)
         except HubbleCloudError as err:
             _LOGGER.warning(
-                "Hubble cloud inventory unavailable; local entities remain active: %s",
+                "Hubble cloud authentication unavailable; local entities remain "
+                "active: %s",
                 type(err).__name__,
+            )
+        else:
+            try:
+                cloud_cameras = await cloud_client.async_get_cameras(cloud_session)
+            except HubbleCloudError as err:
+                _LOGGER.warning(
+                    "Hubble cloud inventory unavailable; local entities remain "
+                    "active: %s",
+                    type(err).__name__,
+                )
+
+            inventory_ids = {camera.registration_id for camera in cloud_cameras}
+            recovered_cameras: list[HubbleCloudCamera] = []
+            try:
+                subscription_camera_ids = (
+                    await cloud_client.async_get_subscription_camera_ids(
+                        cloud_session
+                    )
+                )
+            except HubbleCloudError as err:
+                _LOGGER.warning(
+                    "Hubble subscription inventory unavailable; normal cloud "
+                    "inventory remains active: %s",
+                    type(err).__name__,
+                )
+                subscription_camera_ids = ()
+            for registration_id in subscription_camera_ids:
+                if (
+                    registration_id in inventory_ids
+                    or registration_id[2:6]
+                    not in _SUBSCRIPTION_DISCOVERY_MODEL_CODES
+                ):
+                    continue
+                try:
+                    recovered_cameras.append(
+                        await cloud_client.async_get_camera(
+                            cloud_session, registration_id
+                        )
+                    )
+                except HubbleCloudError as err:
+                    _LOGGER.warning(
+                        "Subscription-discovered Hubble 3667 is unavailable: %s",
+                        type(err).__name__,
+                    )
+            inventory_ids.update(
+                camera.registration_id for camera in recovered_cameras
+            )
+
+            manual_cameras: list[HubbleCloudCamera] = []
+            for index, registration_id in enumerate(
+                configured_cloud_camera_ids, start=1
+            ):
+                if registration_id in inventory_ids:
+                    continue
+                try:
+                    manual_cameras.append(
+                        await cloud_client.async_get_camera(
+                            cloud_session, registration_id
+                        )
+                    )
+                except HubbleCloudError as err:
+                    _LOGGER.warning(
+                        "Manual Hubble cloud camera %d is unavailable: %s",
+                        index,
+                        type(err).__name__,
+                    )
+            cloud_command_cameras = (*recovered_cameras, *manual_cameras)
+            cloud_cameras = (*cloud_cameras, *cloud_command_cameras)
+            if cloud_command_cameras:
+                cloud_coordinator = HubbleCloudCoordinator(
+                    hass,
+                    cloud_client,
+                    cloud_session,
+                    cloud_command_cameras,
+                )
+                await cloud_coordinator.async_config_entry_first_refresh()
+
+            diagnostic_path = Path(hass.config.path("hubble_cloud_structure.json"))
+            diagnostic_payload = [
+                {
+                    "name": camera.name,
+                    "device_model_id": camera.device_model_id,
+                    "root_keys": list(camera.structure_root_keys),
+                    "orbweb_keys": list(camera.structure_orbweb_keys),
+                    "device_status_keys": list(camera.structure_device_status_keys),
+                    "device_keys": list(camera.structure_device_keys),
+                    "has_mac": bool(camera.mac_address),
+                    "has_orbweb": camera.has_orbweb_credentials,
+                }
+                for camera in cloud_cameras
+            ]
+            await hass.async_add_executor_job(
+                diagnostic_path.write_text,
+                json.dumps(diagnostic_payload, indent=2, sort_keys=True),
+                "utf-8",
             )
 
     local_camera_specs = await async_discover_cloud_cameras(
@@ -116,39 +239,60 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         endpoint.host: endpoint
         for endpoint in await async_probe_rtsp_candidates(direct_candidates)
     }
-    cloud_by_mac = {
-        normalize_mac(camera.mac_address or ""): camera
-        for camera in cloud_cameras
-        if camera.has_orbweb_credentials and camera.mac_address
+    coordinator_data = coordinator.data if coordinator is not None else {}
+    local_macs = {
+        spec.host: (
+            coordinator_data[spec.host].mac
+            if spec.host in coordinator_data
+            else None
+        )
+        for spec in local_camera_specs
     }
-    orbweb_target_ids: dict[str, str] = {}
-    orbweb_auth_passwords: dict[str, str] = {}
-    if coordinator is not None:
-        for host, data in coordinator.data.items():
-            camera = cloud_by_mac.get(normalize_mac(data.mac or ""))
-            if (
-                host not in direct_rtsp_endpoints
-                and camera is not None
-                and camera.orbweb_sid is not None
-                and camera.orbweb_password is not None
-            ):
-                orbweb_target_ids[host] = camera.orbweb_sid
-                orbweb_auth_passwords[host] = camera.orbweb_password
+    orbweb_streams = build_orbweb_stream_bindings(
+        cloud_cameras,
+        local_camera_specs,
+        local_macs,
+        direct_rtsp_endpoints,
+    )
+    orbweb_target_ids = {binding.key: binding.target_id for binding in orbweb_streams}
+    orbweb_auth_passwords = {
+        binding.key: binding.auth_password for binding in orbweb_streams
+    }
+    orbweb_route_hosts = {
+        binding.key: binding.route_host for binding in orbweb_streams
+    }
     orbweb_mappings = (
         OrbwebLanMappingPool(
             async_get_clientsession(hass),
             orbweb_target_ids,
             auth_passwords=orbweb_auth_passwords,
+            source_route_hosts=orbweb_route_hosts,
         )
         if orbweb_target_ids
         else None
     )
+    model_by_target = {
+        camera.orbweb_sid: camera.model_code
+        for camera in cloud_cameras
+        if camera.orbweb_sid is not None
+    }
+    rtsp_normalization_keys = frozenset(
+        binding.key
+        for binding in orbweb_streams
+        if model_by_target.get(binding.target_id) == "3667"
+    )
+    rtsp_restream = _create_rtsp_restream(hass, rtsp_normalization_keys)
     entry.runtime_data = HubbleRuntimeData(
         local_camera_specs=local_camera_specs,
         local_coordinator=coordinator,
+        cloud_coordinator=cloud_coordinator,
         cloud_cameras=cloud_cameras,
+        cloud_command_cameras=cloud_command_cameras,
         direct_rtsp_endpoints=direct_rtsp_endpoints,
+        orbweb_streams=orbweb_streams,
         orbweb_mappings=orbweb_mappings,
+        rtsp_normalization_keys=rtsp_normalization_keys,
+        rtsp_restream=rtsp_restream,
     )
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -158,11 +302,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
 async def async_unload_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bool:
     """Unload a Hubble Connected config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unloaded and entry.runtime_data.orbweb_mappings is not None:
-        await entry.runtime_data.orbweb_mappings.async_close()
+    if unloaded:
+        if entry.runtime_data.rtsp_restream is not None:
+            try:
+                await entry.runtime_data.rtsp_restream.async_close()
+            except HubbleRestreamError as err:
+                _LOGGER.warning("Normalized RTSP cleanup failed: %s", err)
+        if entry.runtime_data.orbweb_mappings is not None:
+            await entry.runtime_data.orbweb_mappings.async_close()
     return unloaded
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> None:
     """Reload entities when local camera options change."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _create_rtsp_restream(
+    hass: HomeAssistant,
+    normalization_keys: frozenset[str],
+) -> HubbleRtspRestreamManager | None:
+    """Use HA-managed go2rtc only when a 3667 needs media normalization."""
+    if not normalization_keys:
+        return None
+    config = hass.data.get(_DATA_GO2RTC)
+    if config is None or config.url != HA_MANAGED_URL:
+        _LOGGER.warning(
+            "Hubble 3667 media normalization requires Home Assistant-managed go2rtc"
+        )
+        return None
+
+    client = Go2RtcRestClient(config.session, config.url)
+
+    async def async_delete_stream(name: str) -> None:
+        async with config.session.delete(
+            urljoin(config.url, "api/streams"), params={"src": name}
+        ) as response:
+            response.raise_for_status()
+
+    return HubbleRtspRestreamManager(client.streams, async_delete_stream)

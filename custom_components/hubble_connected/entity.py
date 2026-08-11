@@ -33,8 +33,9 @@ class HubbleLocalEntity(CoordinatorEntity[HubbleLocalCoordinator]):
         if model_code:
             model = f"{model} ({model_code})"
         connections = set()
-        if data is not None and data.mac:
-            connections.add((dr.CONNECTION_NETWORK_MAC, data.mac))
+        mac = data.mac if data is not None and data.mac else spec.cloud_mac
+        if mac:
+            connections.add((dr.CONNECTION_NETWORK_MAC, mac))
         return DeviceInfo(
             identifiers={(DOMAIN, f"camera:{self._host}")},
             connections=connections,

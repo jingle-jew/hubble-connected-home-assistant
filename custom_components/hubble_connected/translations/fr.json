@@ -5,8 +5,10 @@
     },
     "error": {
       "cloud_cannot_connect": "Impossible de joindre le cloud Hubble",
+      "cloud_credentials_required": "Les identifiants du compte Hubble sont requis pour les caméras cloud ajoutées manuellement",
       "cloud_invalid_auth": "Le cloud Hubble a refusé les identifiants du compte",
       "cloud_invalid_response": "Le cloud Hubble a retourné une réponse non prise en charge",
+      "invalid_cloud_camera_ids": "La liste des identifiants de caméras cloud est invalide",
       "invalid_camera_list": "La liste des caméras locales est invalide"
     },
     "step": {
@@ -14,10 +16,11 @@
         "data": {
           "cloud_login": "Courriel du compte Hubble (facultatif)",
           "cloud_password": "Mot de passe Hubble",
+          "cloud_camera_ids": "Identifiants de secours à ajouter manuellement (séparés par des virgules)",
           "local_cameras": "Caméras locales (Nom=IP, séparées par des virgules)",
           "name": "Nom de l’intégration"
         },
-        "description": "Les identifiants cloud Hubble découvrent tes propres caméras et activent la vidéo LAN Orbweb native sans Android. La liste locale est facultative et améliore la découverte lorsqu’une ancienne caméra manque dans l’inventaire cloud.",
+        "description": "Les identifiants Hubble découvrent tes caméras et activent la vidéo LAN Orbweb native sans Android. Les 3667 omises sont récupérées automatiquement depuis l’inventaire des abonnements du compte. Les identifiants manuels et la liste locale restent des solutions de secours facultatives.",
         "title": "Hubble Connected"
       }
     }
@@ -64,8 +67,10 @@
   "options": {
     "error": {
       "cloud_cannot_connect": "Impossible de joindre le cloud Hubble",
+      "cloud_credentials_required": "Les identifiants du compte Hubble sont requis pour les caméras cloud ajoutées manuellement",
       "cloud_invalid_auth": "Le cloud Hubble a refusé les identifiants du compte",
       "cloud_invalid_response": "Le cloud Hubble a retourné une réponse non prise en charge",
+      "invalid_cloud_camera_ids": "La liste des identifiants de caméras cloud est invalide",
       "invalid_camera_list": "La liste des caméras locales est invalide"
     },
     "step": {
@@ -73,9 +78,10 @@
         "data": {
           "cloud_login": "Courriel du compte Hubble (facultatif)",
           "cloud_password": "Mot de passe Hubble (laisser vide pour conserver celui enregistré)",
+          "cloud_camera_ids": "Identifiants de secours à ajouter manuellement (séparés par des virgules)",
           "local_cameras": "Caméras locales (Nom=IP, séparées par des virgules)"
         },
-        "description": "La vidéo LAN Orbweb native fonctionne sans Android pour les caméras associées au cloud. La liste locale est facultative et aide à découvrir les anciennes caméras absentes de l’inventaire cloud.",
+        "description": "La vidéo LAN Orbweb native fonctionne sans Android pour les caméras associées au cloud. Les 3667 omises sont récupérées automatiquement depuis l’inventaire des abonnements du compte. Les identifiants manuels et la liste locale restent des solutions de secours facultatives.",
         "title": "Caméras Hubble"
       }
     }
