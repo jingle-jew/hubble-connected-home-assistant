@@ -141,12 +141,15 @@ class HubbleOrbwebCommandBindingTests(unittest.TestCase):
 class HubbleOrbwebCommandClientTests(unittest.IsolatedAsyncioTestCase):
     """Lock the verified paths, parsing, and mapped camera port."""
 
-    async def test_reads_all_three_getters_from_mapped_port_80(self) -> None:
+    async def test_reads_verified_getters_from_mapped_port_80(self) -> None:
         request_lines: list[str] = []
         responses = {
             "value_temperature": "value_temperature: 22.67",
             "get_wifi_strength": "get_wifi_strength: 85",
             "get_video_bitrate": "get_video_bitrate: 600",
+            "get_brightness": "get_brightness: 8",
+            "get_night_vision": "get_night_vision: 0",
+            "value_flipup": "value_flipup: 1",
         }
 
         async def handle(reader, writer) -> None:
@@ -174,6 +177,9 @@ class HubbleOrbwebCommandClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await client.async_get_temperature(), 22.67)
             self.assertEqual(await client.async_get_wifi_strength(), 85)
             self.assertEqual(await client.async_get_video_bitrate(), 600)
+            self.assertEqual(await client.async_get_brightness(), 8)
+            self.assertEqual(await client.async_get_night_vision(), 0)
+            self.assertEqual(await client.async_get_flipup(), 1)
         finally:
             server.close()
             await server.wait_closed()
@@ -186,8 +192,97 @@ class HubbleOrbwebCommandClientTests(unittest.IsolatedAsyncioTestCase):
                 "GET /?action=command&command=value_temperature HTTP/1.1",
                 "GET /?action=command&command=get_wifi_strength HTTP/1.1",
                 "GET /?action=command&command=get_video_bitrate HTTP/1.1",
+                "GET /?action=command&command=get_brightness HTTP/1.1",
+                "GET /?action=command&command=get_night_vision HTTP/1.1",
+                "GET /?action=command&command=value_flipup HTTP/1.1",
             ],
         )
+
+    async def test_rejects_3667_contrast_getter_http_204(self) -> None:
+        async def handle(reader, writer) -> None:
+            await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n")
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(handle, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = commands.HubbleOrbwebCommandClient(
+            _MappingPool(_StablePort(port)),
+            "camera-key",
+        )
+        try:
+            with self.assertRaisesRegex(
+                commands.HubbleOrbwebCommandProtocolError,
+                "Unexpected HTTP status 204",
+            ):
+                await client.async_get_contrast()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_writes_verified_3667_settings_with_acknowledgement(self) -> None:
+        request_lines: list[str] = []
+        responses = {
+            "set_brightness": b"set_brightness: 0",
+            "set_video_bitrate": b'{"value":"0"}',
+            "set_night_vision": b"set_night_vision: 0",
+            "set_flipup": b'{"value":0}',
+        }
+
+        async def handle(reader, writer) -> None:
+            request = await reader.readuntil(b"\r\n\r\n")
+            request_line = request.decode("ascii").split("\r\n", 1)[0]
+            request_lines.append(request_line)
+            command = request_line.split("command=", 1)[1].split("&", 1)[0]
+            body = responses[command]
+            writer.write(
+                b"HTTP/1.1 200 OK\r\n"
+                + f"Content-Length: {len(body)}\r\n".encode()
+                + b"Connection: close\r\n\r\n"
+                + body
+            )
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(handle, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = commands.HubbleOrbwebCommandClient(
+            _MappingPool(_StablePort(port)),
+            "camera-key",
+        )
+        try:
+            await client.async_set_brightness(4)
+            await client.async_set_video_bitrate(300)
+            await client.async_set_night_vision(2)
+            await client.async_set_flipup(True)
+        finally:
+            server.close()
+            await server.wait_closed()
+
+        self.assertEqual(
+            request_lines,
+            [
+                "GET /?action=command&command=set_brightness&value=4 HTTP/1.1",
+                "GET /?action=command&command=set_video_bitrate&value=300 HTTP/1.1",
+                "GET /?action=command&command=set_night_vision&value=2 HTTP/1.1",
+                "GET /?action=command&command=set_flipup&value=1 HTTP/1.1",
+            ],
+        )
+
+    async def test_rejects_unverified_3667_setting_values(self) -> None:
+        client = commands.HubbleOrbwebCommandClient(
+            _MappingPool(_StablePort(1)),
+            "camera-key",
+        )
+        with self.assertRaises(commands.HubbleOrbwebCommandProtocolError):
+            await client.async_set_brightness(0)
+        with self.assertRaises(commands.HubbleOrbwebCommandProtocolError):
+            await client.async_set_video_bitrate(200)
+        with self.assertRaises(commands.HubbleOrbwebCommandProtocolError):
+            await client.async_set_night_vision(3)
 
     async def test_rejects_malformed_getter_response(self) -> None:
         async def handle(_reader, writer) -> None:

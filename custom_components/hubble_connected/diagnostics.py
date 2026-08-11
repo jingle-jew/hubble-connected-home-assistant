@@ -107,6 +107,10 @@ async def async_get_config_entry_diagnostics(
                 "temperature_c": data.temperature,
                 "wifi_strength_percent": data.wifi_strength,
                 "video_bitrate_kbit_s": data.video_bitrate,
+                "brightness": data.brightness,
+                "contrast": data.contrast,
+                "night_vision": data.night_vision,
+                "ceiling_mount": data.flipup,
                 "has_error": data.error is not None,
                 "source": "local_orbweb_http",
             }

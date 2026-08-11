@@ -89,6 +89,11 @@ async def async_setup_entry(
                         camera.registration_id,
                         "local_orbweb_http",
                     ),
+                    HubbleCommandBrightnessSensor(
+                        orbweb_coordinator,
+                        camera.registration_id,
+                        "local_orbweb_http",
+                    ),
                 )
             )
     async_add_entities(entities)
@@ -202,6 +207,23 @@ class HubbleCommandVideoBitrateSensor(HubbleCommandSensor):
         source: str,
     ) -> None:
         super().__init__(coordinator, registration_id, "video_bitrate", source)
+
+
+class HubbleCommandBrightnessSensor(HubbleCommandSensor):
+    """Image brightness read through the mapped 3667 command service."""
+
+    _attr_translation_key = "brightness"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:brightness-6"
+    _value_field = "brightness"
+
+    def __init__(
+        self,
+        coordinator: HubbleOrbwebCommandCoordinator,
+        registration_id: str,
+        source: str,
+    ) -> None:
+        super().__init__(coordinator, registration_id, "brightness", source)
 
 
 class HubbleTemperatureSensor(HubbleLocalEntity, SensorEntity):

@@ -48,13 +48,17 @@ class HubbleLocalCoordinator(DataUpdateCoordinator[dict[str, HubbleLocalCameraDa
 
 @dataclass(frozen=True, slots=True)
 class HubbleCommandCameraData:
-    """Latest state returned by three read-only camera getters."""
+    """Latest state returned by read-only camera getters."""
 
     camera: HubbleCloudCamera
     temperature: float | None
     wifi_strength: int | None
     video_bitrate: int | None
     available: bool
+    brightness: int | None = None
+    contrast: int | None = None
+    night_vision: int | None = None
+    flipup: int | None = None
     error: str | None = None
 
 
@@ -172,14 +176,30 @@ class HubbleOrbwebCommandCoordinator(
             video_bitrate = await read(
                 "video_bitrate", client.async_get_video_bitrate
             )
+            brightness = await read("brightness", client.async_get_brightness)
+            night_vision = await read(
+                "night_vision", client.async_get_night_vision
+            )
+            flipup = await read("flipup", client.async_get_flipup)
             return HubbleCommandCameraData(
                 camera=camera,
                 temperature=temperature,
                 wifi_strength=wifi_strength,
                 video_bitrate=video_bitrate,
+                brightness=brightness,
+                contrast=None,
+                night_vision=night_vision,
+                flipup=flipup,
                 available=any(
                     value is not None
-                    for value in (temperature, wifi_strength, video_bitrate)
+                    for value in (
+                        temperature,
+                        wifi_strength,
+                        video_bitrate,
+                        brightness,
+                        night_vision,
+                        flipup,
+                    )
                 ),
                 error=",".join(errors) or None,
             )

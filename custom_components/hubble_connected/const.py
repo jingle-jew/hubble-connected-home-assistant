@@ -24,6 +24,7 @@ DIRECT_RTSP_PASSWORD = "pass"
 PLATFORMS = ["binary_sensor", "camera", "number", "select", "sensor", "switch"]
 
 BITRATE_OPTIONS = (100, 200, 300, 400, 600, 800, 1000)
+ORBWEB_3667_BITRATE_OPTIONS = (100, 300, 600, 1000)
 NIGHT_VISION_OPTIONS = {
     0: "auto",
     1: "on",

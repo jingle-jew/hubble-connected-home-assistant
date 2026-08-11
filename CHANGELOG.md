@@ -10,6 +10,11 @@ All notable changes will be documented here.
 - Add temperature, connectivity, Wi-Fi, and bitrate sensors.
 - Read the 3667 temperature, Wi-Fi strength, and video bitrate locally through
   the authenticated Orbweb mapping instead of cloud `publish_command` jobs.
+- Read 3667 brightness, night-vision mode, and ceiling-mount state through the
+  same local Orbweb command mapping, and add bounded local controls for those
+  settings plus video bitrate.
+- Do not expose 3667 contrast entities: its local `get_contrast` command returns
+  HTTP 204 and the official app excludes contrast for this model family.
 - Add verified night-vision, bitrate, indicator-LED, and image-flip controls.
 - Add verified image-brightness and image-contrast sensors and controls for
   compatible local cameras.

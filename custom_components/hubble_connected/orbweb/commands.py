@@ -1,11 +1,13 @@
-"""Read-only Hubble command getters carried by an Orbweb LAN mapping."""
+"""Hubble commands carried by an authenticated Orbweb LAN mapping."""
 
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import suppress
 from urllib.parse import quote
 
+from ..const import NIGHT_VISION_OPTIONS, ORBWEB_3667_BITRATE_OPTIONS
 from ..local import HubbleLocalProtocolError, parse_int_value, parse_temperature
 from .pool import OrbwebLanMappingPool, OrbwebStablePort
 
@@ -74,8 +76,83 @@ class HubbleOrbwebCommandClient:
         except (HubbleLocalProtocolError, ValueError) as err:
             raise HubbleOrbwebCommandProtocolError(str(err)) from err
 
-    async def _async_command(self, command: str, timeout: float = 5.0) -> str:
+    async def async_get_brightness(self) -> int:
+        """Read the camera image brightness without assuming a write range."""
+        return await self._async_get_integer("get_brightness", 0, 255)
+
+    async def async_get_contrast(self) -> int:
+        """Read the camera image contrast without assuming a write range."""
+        return await self._async_get_integer("get_contrast", 0, 255)
+
+    async def async_get_night_vision(self) -> int:
+        """Read the camera night-vision mode."""
+        return await self._async_get_integer("get_night_vision", 0, 2)
+
+    async def async_get_flipup(self) -> int:
+        """Read the camera ceiling-mount image flip state."""
+        return await self._async_get_integer("value_flipup", 0, 1)
+
+    async def async_set_brightness(self, value: int) -> None:
+        """Set the 3667 image brightness level used by the official app."""
+        if not 1 <= value <= 8:
+            raise HubbleOrbwebCommandProtocolError(
+                f"Unsupported image brightness: {value}"
+            )
+        await self._async_set_integer("set_brightness", value)
+
+    async def async_set_video_bitrate(self, value: int) -> None:
+        """Set one of the four bitrates exposed for Orbweb 3667 cameras."""
+        if value not in ORBWEB_3667_BITRATE_OPTIONS:
+            raise HubbleOrbwebCommandProtocolError(
+                f"Unsupported video bitrate: {value}"
+            )
+        await self._async_set_integer("set_video_bitrate", value)
+
+    async def async_set_night_vision(self, value: int) -> None:
+        """Set night vision: 0 auto, 1 on, or 2 off."""
+        if value not in NIGHT_VISION_OPTIONS:
+            raise HubbleOrbwebCommandProtocolError(
+                f"Unsupported night vision mode: {value}"
+            )
+        await self._async_set_integer("set_night_vision", value)
+
+    async def async_set_flipup(self, enabled: bool) -> None:
+        """Enable or disable the ceiling-mount vertical image flip."""
+        await self._async_set_integer("set_flipup", int(enabled))
+
+    async def _async_set_integer(self, command: str, value: int) -> None:
+        response = await self._async_command(command, value=str(value))
+        result = _parse_setter_result(command, response)
+        if result != 0:
+            raise HubbleOrbwebCommandProtocolError(
+                f"Camera rejected {command} with result {result}"
+            )
+
+    async def _async_get_integer(
+        self,
+        command: str,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        try:
+            return parse_int_value(
+                command,
+                await self._async_command(command),
+                minimum,
+                maximum,
+            )
+        except (HubbleLocalProtocolError, ValueError) as err:
+            raise HubbleOrbwebCommandProtocolError(str(err)) from err
+
+    async def _async_command(
+        self,
+        command: str,
+        timeout: float = 5.0,
+        value: str | None = None,
+    ) -> str:
         path = f"/?action=command&command={quote(command, safe='')}"
+        if value is not None:
+            path += f"&value={quote(value, safe='')}"
         request = (
             f"GET {path} HTTP/1.1\r\n"
             "Host: camera\r\n"
@@ -145,3 +222,20 @@ class HubbleOrbwebCommandClient:
             )
             self._stable_port = stable_port
         return stable_port
+
+
+def _parse_setter_result(command: str, response: str) -> int:
+    """Parse the two acknowledged response shapes used by Hubble firmware."""
+    try:
+        return parse_int_value(command, response, -999, 999)
+    except HubbleLocalProtocolError as prefixed_error:
+        try:
+            payload = json.loads(response)
+            value = payload.get("value") if isinstance(payload, dict) else None
+            if isinstance(value, bool) or not isinstance(value, (int, str)):
+                raise ValueError
+            return int(value)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            raise HubbleOrbwebCommandProtocolError(
+                f"Unexpected {command} acknowledgement"
+            ) from prefixed_error

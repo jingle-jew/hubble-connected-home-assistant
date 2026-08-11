@@ -7,7 +7,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, MODEL_NAMES
-from .coordinator import HubbleLocalCoordinator
+from .coordinator import HubbleLocalCoordinator, HubbleOrbwebCommandCoordinator
 
 
 class HubbleLocalEntity(CoordinatorEntity[HubbleLocalCoordinator]):
@@ -43,4 +43,38 @@ class HubbleLocalEntity(CoordinatorEntity[HubbleLocalCoordinator]):
             manufacturer="Hubble Connected / Motorola",
             model=model,
             sw_version=data.firmware_version if data is not None else None,
+        )
+
+
+class HubbleOrbwebCommandEntity(
+    CoordinatorEntity[HubbleOrbwebCommandCoordinator]
+):
+    """Base entity for controls carried through a 3667 Orbweb mapping."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: HubbleOrbwebCommandCoordinator,
+        registration_id: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._registration_id = registration_id
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        camera = self.coordinator.cameras[self._registration_id]
+        connections = set()
+        if camera.mac_address:
+            connections.add((dr.CONNECTION_NETWORK_MAC, camera.mac_address))
+        model = "Hubble camera"
+        if camera.model_code:
+            model = f"{model} ({camera.model_code})"
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"cloud:{camera.registration_id}")},
+            connections=connections,
+            name=camera.name,
+            manufacturer="Hubble Connected / Motorola",
+            model=model,
+            sw_version=camera.firmware_version,
         )

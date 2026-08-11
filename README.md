@@ -153,6 +153,9 @@ See [SECURITY.md](SECURITY.md) before reporting a security problem.
 - Image brightness and contrast entities are suppressed on the 0667 because
   changing those values terminates its direct RTSP encoder and the tested
   firmware does not restart the service safely.
+- The 3667 exposes local brightness, bitrate, night-vision, and ceiling-mount
+  state through Orbweb. Its contrast getter returns HTTP 204, so contrast is not
+  exposed for this model.
 - Tunnel renewal is still being tested across more models and firmware.
 - PTZ, talkback, motion events, and cloud snapshots are not exposed.
 - Temperature units are handled by Home Assistant; no camera-side Celsius /

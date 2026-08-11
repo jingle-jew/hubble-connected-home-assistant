@@ -106,6 +106,9 @@ _LOCAL_ENTITY_SUFFIXES = frozenset(
 _LOCAL_IMAGE_ENTITY_SUFFIXES = frozenset(
     {"brightness", "brightness_setting", "contrast", "contrast_setting"}
 )
+_ORBWEB_3667_UNSUPPORTED_ENTITY_SUFFIXES = frozenset(
+    {"contrast", "contrast_setting"}
+)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bool:
@@ -389,9 +392,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         local_entity_specs,
         image_level_entity_specs,
     )
+    removed_entities += _remove_unsupported_orbweb_command_entities(
+        hass,
+        entry,
+        orbweb_command_cameras,
+    )
     if removed_entities:
         _LOGGER.info(
-            "Removed %d unsupported or unsafe local entities",
+            "Removed %d unsupported or unsafe Hubble entities",
             removed_entities,
         )
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
@@ -462,6 +470,30 @@ def _remove_unsafe_image_entities(
         f"{host}:{suffix}"
         for host in unsafe_hosts
         for suffix in _LOCAL_IMAGE_ENTITY_SUFFIXES
+    }
+    if not stale_unique_ids:
+        return 0
+
+    registry = er.async_get(hass)
+    removed = 0
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.unique_id not in stale_unique_ids:
+            continue
+        registry.async_remove(entity.entity_id)
+        removed += 1
+    return removed
+
+
+def _remove_unsupported_orbweb_command_entities(
+    hass: HomeAssistant,
+    entry: HubbleConfigEntry,
+    cameras: tuple[HubbleCloudCamera, ...],
+) -> int:
+    """Remove 3667 controls whose local command returns no value."""
+    stale_unique_ids = {
+        f"cloud:{camera.registration_id}:{suffix}"
+        for camera in cameras
+        for suffix in _ORBWEB_3667_UNSUPPORTED_ENTITY_SUFFIXES
     }
     if not stale_unique_ids:
         return 0
