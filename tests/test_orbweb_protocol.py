@@ -2278,9 +2278,7 @@ class OrbwebLanMappingPoolTests(unittest.IsolatedAsyncioTestCase):
             object(),
             {"camera-key": "private-target"},
             rendezvous_client=_PoolRendezvousClient(),
-            source_address_resolver=lambda _host: asyncio.sleep(
-                0, result="192.0.2.20"
-            ),
+            source_address_resolver=lambda _host: asyncio.sleep(0, result="192.0.2.20"),
             mapping_opener=open_mapping,
         )
         reader = object()

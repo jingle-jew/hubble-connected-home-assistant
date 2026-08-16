@@ -106,9 +106,7 @@ _LOCAL_ENTITY_SUFFIXES = frozenset(
 _LOCAL_IMAGE_ENTITY_SUFFIXES = frozenset(
     {"brightness", "brightness_setting", "contrast", "contrast_setting"}
 )
-_ORBWEB_3667_UNSUPPORTED_ENTITY_SUFFIXES = frozenset(
-    {"contrast", "contrast_setting"}
-)
+_ORBWEB_3667_UNSUPPORTED_ENTITY_SUFFIXES = frozenset({"contrast", "contrast_setting"})
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bool:

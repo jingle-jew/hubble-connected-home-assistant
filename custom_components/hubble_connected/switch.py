@@ -172,9 +172,9 @@ class HubbleOrbwebCeilingMountSwitch(
 
     async def _async_set(self, enabled: bool) -> None:
         try:
-            await self.coordinator.clients[
-                self._registration_id
-            ].async_set_flipup(enabled)
+            await self.coordinator.clients[self._registration_id].async_set_flipup(
+                enabled
+            )
         except HubbleOrbwebCommandError as err:
             raise HomeAssistantError(
                 f"Unable to set Hubble ceiling mount to {enabled}"

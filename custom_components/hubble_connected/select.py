@@ -142,11 +142,7 @@ class HubbleOrbwebNightVisionSelect(HubbleOrbwebCommandEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         data = self.coordinator.data.get(self._registration_id)
-        return (
-            NIGHT_VISION_OPTIONS.get(data.night_vision)
-            if data is not None
-            else None
-        )
+        return NIGHT_VISION_OPTIONS.get(data.night_vision) if data is not None else None
 
     async def async_select_option(self, option: str) -> None:
         try:
@@ -180,18 +176,14 @@ class HubbleOrbwebVideoBitrateSelect(HubbleOrbwebCommandEntity, SelectEntity):
     @property
     def available(self) -> bool:
         data = self.coordinator.data.get(self._registration_id)
-        return (
-            data is not None
-            and data.video_bitrate in ORBWEB_3667_BITRATE_OPTIONS
-        )
+        return data is not None and data.video_bitrate in ORBWEB_3667_BITRATE_OPTIONS
 
     @property
     def current_option(self) -> str | None:
         data = self.coordinator.data.get(self._registration_id)
         return (
             str(data.video_bitrate)
-            if data is not None
-            and data.video_bitrate in ORBWEB_3667_BITRATE_OPTIONS
+            if data is not None and data.video_bitrate in ORBWEB_3667_BITRATE_OPTIONS
             else None
         )
 

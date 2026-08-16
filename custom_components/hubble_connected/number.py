@@ -155,9 +155,9 @@ class HubbleOrbwebBrightnessNumber(HubbleOrbwebCommandEntity, NumberEntity):
         if not float(value).is_integer():
             raise HomeAssistantError("Hubble image brightness must be an integer")
         try:
-            await self.coordinator.clients[
-                self._registration_id
-            ].async_set_brightness(int(value))
+            await self.coordinator.clients[self._registration_id].async_set_brightness(
+                int(value)
+            )
         except HubbleOrbwebCommandError as err:
             raise HomeAssistantError(
                 f"Unable to set Hubble image brightness to {value:g}"

@@ -9,9 +9,7 @@ import types
 import unittest
 from pathlib import Path
 
-INTEGRATION_PATH = (
-    Path(__file__).parents[1] / "custom_components" / "hubble_connected"
-)
+INTEGRATION_PATH = Path(__file__).parents[1] / "custom_components" / "hubble_connected"
 PACKAGE = "hubble_orbweb_commands_test"
 package = types.ModuleType(PACKAGE)
 package.__path__ = [str(INTEGRATION_PATH)]

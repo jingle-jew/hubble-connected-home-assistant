@@ -137,9 +137,7 @@ class HubbleOrbwebCommandCoordinator(
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         self.cameras = {camera.registration_id: camera for camera in cameras}
-        self.bindings = {
-            binding.registration_id: binding for binding in bindings
-        }
+        self.bindings = {binding.registration_id: binding for binding in bindings}
         self.clients = {
             registration_id: HubbleOrbwebCommandClient(mappings, binding.key)
             for registration_id, binding in self.bindings.items()
@@ -170,16 +168,10 @@ class HubbleOrbwebCommandCoordinator(
                     return None
 
             temperature = await read("temperature", client.async_get_temperature)
-            wifi_strength = await read(
-                "wifi_strength", client.async_get_wifi_strength
-            )
-            video_bitrate = await read(
-                "video_bitrate", client.async_get_video_bitrate
-            )
+            wifi_strength = await read("wifi_strength", client.async_get_wifi_strength)
+            video_bitrate = await read("video_bitrate", client.async_get_video_bitrate)
             brightness = await read("brightness", client.async_get_brightness)
-            night_vision = await read(
-                "night_vision", client.async_get_night_vision
-            )
+            night_vision = await read("night_vision", client.async_get_night_vision)
             flipup = await read("flipup", client.async_get_flipup)
             return HubbleCommandCameraData(
                 camera=camera,

@@ -46,9 +46,7 @@ class HubbleLocalEntity(CoordinatorEntity[HubbleLocalCoordinator]):
         )
 
 
-class HubbleOrbwebCommandEntity(
-    CoordinatorEntity[HubbleOrbwebCommandCoordinator]
-):
+class HubbleOrbwebCommandEntity(CoordinatorEntity[HubbleOrbwebCommandCoordinator]):
     """Base entity for controls carried through a 3667 Orbweb mapping."""
 
     _attr_has_entity_name = True
