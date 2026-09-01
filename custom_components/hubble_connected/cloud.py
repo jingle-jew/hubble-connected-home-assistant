@@ -34,6 +34,12 @@ APP_HEADERS = {
     "X-Application-Id": "hubble_gcm:6.5.70",
     "User-Agent": "HubbleConnected/6.5.70/HomeAssistant",
 }
+PARTNER_APP_HEADERS = {
+    **APP_HEADERS,
+    "X-Auth-Tenant": "hubble_partner",
+    "X-Application-Id": "hubble_club_partner_gcm:1.0.31",
+    "X-Auth-Token-Type": "app_token",
+}
 
 
 class HubbleCloudError(Exception):
@@ -301,15 +307,26 @@ class HubbleCloudClient:
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._job_poll_interval = job_poll_interval
+        self._headers = APP_HEADERS
 
     async def async_authenticate(self, login: str, password: str) -> HubbleCloudSession:
         """Exchange account credentials for a short cloud API token."""
-        payload = await self._async_json_request(
-            "post",
-            AUTH_PATH,
-            json={"login": login, "password": password},
-            authentication=True,
-        )
+        self._headers = APP_HEADERS
+        try:
+            payload = await self._async_json_request(
+                "post",
+                AUTH_PATH,
+                json={"login": login, "password": password},
+                authentication=True,
+            )
+        except HubbleCloudAuthError:
+            self._headers = PARTNER_APP_HEADERS
+            payload = await self._async_json_request(
+                "post",
+                AUTH_PATH,
+                json={"login": login, "password": password},
+                authentication=True,
+            )
         return parse_authentication(payload)
 
     async def async_get_cameras(
@@ -434,7 +451,7 @@ class HubbleCloudClient:
             request = getattr(self._session, method)
             async with request(
                 f"{self._base_url}{path}",
-                headers=APP_HEADERS,
+                headers=self._headers,
                 timeout=REQUEST_TIMEOUT,
                 **kwargs,
             ) as response:
@@ -449,7 +466,7 @@ class HubbleCloudClient:
                 f"Cloud request failed: {type(err).__name__}"
             ) from err
 
-        if status in {401, 403}:
+        if status in {401, 403} or (path == AUTH_PATH and status == 424):
             raise HubbleCloudAuthError("Cloud credentials or token were rejected")
         if not 200 <= status < 300:
             if authentication and _looks_like_auth_failure(payload):

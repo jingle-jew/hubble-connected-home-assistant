@@ -154,6 +154,37 @@ class HubbleCloudTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_partner_headers_are_used_only_after_authentication_rejection(self) -> None:
+        async def scenario() -> None:
+            session = FakeSession(
+                [
+                    FakeResponse(424, {"status": "424", "message": ""}),
+                    FakeResponse(
+                        201,
+                        {"status": "200", "data": {"authentication_token": "t"}},
+                    ),
+                    FakeResponse(200, {"status": "200", "data": []}),
+                ]
+            )
+            client = cloud.HubbleCloudClient(session)
+
+            auth = await client.async_authenticate("owner@example.com", "pw")
+            await client.async_get_cameras(auth)
+
+            self.assertEqual(
+                session.requests[0][2]["headers"]["X-Auth-Tenant"], "hubble"
+            )
+            self.assertEqual(
+                session.requests[1][2]["headers"]["X-Auth-Tenant"],
+                "hubble_partner",
+            )
+            self.assertEqual(
+                session.requests[2][2]["headers"]["X-Auth-Tenant"],
+                "hubble_partner",
+            )
+
+        asyncio.run(scenario())
+
     def test_single_camera_uses_v6_to_recover_orbweb_credentials(self) -> None:
         async def scenario() -> None:
             registration_id = "01366700000000000000000000"
@@ -334,7 +365,9 @@ class HubbleCloudTests(unittest.TestCase):
                 "status": "401",
                 "message": "authentication failed",
             }
-            session = FakeSession([FakeResponse(200, response)])
+            session = FakeSession(
+                [FakeResponse(200, response), FakeResponse(200, response)]
+            )
             client = cloud.HubbleCloudClient(session)
             with self.assertRaises(cloud.HubbleCloudAuthError):
                 await client.async_authenticate("owner@example.com", "wrong")
