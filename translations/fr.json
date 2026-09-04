@@ -1,0 +1,138 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Hubble Connected est déjà configuré."
+    },
+    "error": {
+      "cloud_cannot_connect": "Impossible de joindre le cloud Hubble",
+      "cloud_credentials_required": "Les identifiants du compte Hubble sont requis pour les caméras cloud ajoutées manuellement",
+      "cloud_invalid_auth": "Le cloud Hubble a refusé les identifiants du compte",
+      "cloud_invalid_response": "Le cloud Hubble a retourné une réponse non prise en charge",
+      "invalid_cloud_camera_ids": "La liste des identifiants de caméras cloud est invalide",
+      "invalid_camera_list": "La liste des caméras locales est invalide",
+      "invalid_manual_orbweb": "Les paramètres manuels de la caméra Orbweb sont invalides"
+    },
+    "step": {
+      "user": {
+        "menu_options": {
+          "hubble": "Compte Hubble Connected",
+          "manual_vm85": "Motorola VM85CONNECT (manuel)"
+        },
+        "description": "Choisis comment cette caméra est configurée.",
+        "title": "Hubble Connected / Motorola"
+      },
+      "hubble": {
+        "data": {
+          "cloud_login": "Courriel du compte Hubble (facultatif)",
+          "cloud_password": "Mot de passe Hubble",
+          "cloud_camera_ids": "Identifiants de secours à ajouter manuellement (séparés par des virgules)",
+          "local_cameras": "Caméras locales (Nom=IP, séparées par des virgules)",
+          "name": "Nom de l’intégration"
+        },
+        "description": "Les identifiants Hubble découvrent tes caméras et activent la vidéo LAN Orbweb native sans Android. Les 3667 omises sont récupérées automatiquement depuis l’inventaire des abonnements du compte. Les identifiants manuels et la liste locale restent des solutions de secours facultatives.",
+        "title": "Hubble Connected"
+      },
+      "manual_vm85": {
+        "data": {
+          "name": "Nom de la caméra",
+          "orbweb_host": "Adresse IP locale de la caméra",
+          "orbweb_sid": "SID Orbweb",
+          "orbweb_account": "Compte Orbweb",
+          "orbweb_password": "Mot de passe de l’appareil Orbweb",
+          "rtsp_username": "Nom d’utilisateur RTSP",
+          "rtsp_password": "Mot de passe RTSP"
+        },
+        "description": "Configuration avancée d’une Motorola VM85CONNECT dont tu es propriétaire. La caméra et Home Assistant doivent être sur le même réseau local.",
+        "title": "Motorola VM85CONNECT"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connectivity": {
+        "name": "Connectivité"
+      }
+    },
+    "number": {
+      "brightness_setting": {
+        "name": "Réglage de la luminosité de l’image"
+      },
+      "contrast_setting": {
+        "name": "Réglage du contraste de l’image"
+      }
+    },
+    "select": {
+      "night_vision": {
+        "name": "Vision nocturne",
+        "state": {
+          "auto": "Automatique",
+          "off": "Désactivée",
+          "on": "Activée"
+        }
+      },
+      "video_bitrate_setting": {
+        "name": "Réglage du débit vidéo"
+      }
+    },
+    "sensor": {
+      "brightness": {
+        "name": "Luminosité actuelle de l’image"
+      },
+      "contrast": {
+        "name": "Contraste actuel de l’image"
+      },
+      "temperature": {
+        "name": "Température"
+      },
+      "video_bitrate": {
+        "name": "Débit vidéo actuel"
+      },
+      "wifi_strength": {
+        "name": "Puissance Wi-Fi"
+      }
+    },
+    "switch": {
+      "ceiling_mount": {
+        "name": "Montage au plafond"
+      },
+      "indicator_led": {
+        "name": "Voyant d’état"
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "cloud_cannot_connect": "Impossible de joindre le cloud Hubble",
+      "cloud_credentials_required": "Les identifiants du compte Hubble sont requis pour les caméras cloud ajoutées manuellement",
+      "cloud_invalid_auth": "Le cloud Hubble a refusé les identifiants du compte",
+      "cloud_invalid_response": "Le cloud Hubble a retourné une réponse non prise en charge",
+      "invalid_cloud_camera_ids": "La liste des identifiants de caméras cloud est invalide",
+      "invalid_camera_list": "La liste des caméras locales est invalide",
+      "invalid_manual_orbweb": "Les paramètres manuels de la caméra Orbweb sont invalides"
+    },
+    "step": {
+      "init": {
+        "data": {
+          "cloud_login": "Courriel du compte Hubble (facultatif)",
+          "cloud_password": "Mot de passe Hubble (laisser vide pour conserver celui enregistré)",
+          "cloud_camera_ids": "Identifiants de secours à ajouter manuellement (séparés par des virgules)",
+          "local_cameras": "Caméras locales (Nom=IP, séparées par des virgules)"
+        },
+        "description": "La vidéo LAN Orbweb native fonctionne sans Android pour les caméras associées au cloud. Les 3667 omises sont récupérées automatiquement depuis l’inventaire des abonnements du compte. Les identifiants manuels et la liste locale restent des solutions de secours facultatives.",
+        "title": "Caméras Hubble"
+      },
+      "manual_vm85": {
+        "data": {
+          "orbweb_host": "Adresse IP locale de la caméra",
+          "orbweb_sid": "SID Orbweb",
+          "orbweb_account": "Compte Orbweb",
+          "orbweb_password": "Mot de passe Orbweb (laisser vide pour conserver la valeur enregistrée)",
+          "rtsp_username": "Nom d’utilisateur RTSP (laisser vide pour conserver la valeur enregistrée)",
+          "rtsp_password": "Mot de passe RTSP (laisser vide pour conserver la valeur enregistrée)"
+        },
+        "description": "Modifie les paramètres VM85 fournis par le propriétaire. Les secrets enregistrés ne sont jamais affichés.",
+        "title": "Motorola VM85CONNECT"
+      }
+    }
+  }
+}
