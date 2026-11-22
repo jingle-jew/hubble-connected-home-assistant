@@ -87,6 +87,9 @@ the same protocol.
 | 3667 | Hubble account | Supports verified local telemetry and controls through the Orbweb mapping |
 | Motorola VM85CONNECT | Manual owner-authorized setup | Uses model-specific Orbweb and RTSP credentials; hardware 1.2.03 and firmware 1.6.45 tested |
 
+The detailed table covers video paths, sensors, and controls for each model.
+[Compatible devices](COMPATIBLE_DEVICES.md)
+
 These model families have been verified on user-owned cameras. Compatibility
 can still vary by hardware revision, region, and firmware version.
 
