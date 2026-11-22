@@ -27,14 +27,14 @@ and Orbweb. Product names are used only to identify compatible devices.
 No Android phone, Java browser plugin, or separate bridge is required during
 normal operation. Manual VM85CONNECT onboarding currently uses the official
 Android app once to obtain the owner's camera credentials. No camera exploit,
-firmware change, or account-authentication bypass is used. You only need to run the PowerShell script once to obtain the camera credentials.
+firmware change, or account-authentication bypass is used.
 
 ## How video reaches Home Assistant
 
 | Setup path | How ownership credentials are obtained | Media path |
 | --- | --- | --- |
 | Standard Hubble account | Hubble cloud inventory | Authenticated Orbweb LAN tunnel or verified direct RTSP |
-| HubbleClub for Partners account | Automatic partner-profile fallback after standard authentication is rejected | Authenticated Orbweb LAN tunnel followed by one shared Home Assistant go2rtc restream |
+| HubbleClub for Partners account | Automatic partner-profile fallback after standard authentication is rejected | Authenticated Orbweb LAN tunnel, with a shared Home Assistant go2rtc restream for model 1844 |
 | Motorola Nursery | One-time extraction from the owner's authorized Motorola Nursery Android app session | Authenticated Orbweb LAN tunnel to camera port 6667 and `/blinkhd` |
 
 For cloud-provisioned cameras, the account is used to obtain the identifiers
@@ -90,7 +90,8 @@ the same protocol.
 These model families have been verified on user-owned cameras. Compatibility
 can still vary by hardware revision, region, and firmware version.
 
-Do you have Motorola or Luvion camera is not listed and you want to view it in Home Assistant? Please try to connect it and open an issue to get it lised as compatible if it works or to make it compatible! 
+To report results for another camera model, open a GitHub issue with the model,
+firmware version, and redacted diagnostics.
 
 ## Installation
 
@@ -127,8 +128,8 @@ after a restart. Protect the Home Assistant configuration directory and its
 backups.
 
 Authentication first uses the standard Hubble request profile. If the login
-endpoint rejects that profile with HTTP 401, 403 or in case of a HubbleClub for partners account with a 424 response, the integration automatically retries with the Hubble
-partner tenant and application headers. The successful profile remains attached
+endpoint returns HTTP 401, 403, or 424, the integration automatically retries
+with the Hubble partner tenant and application headers. The successful profile remains attached
 to that cloud session for inventory and camera requests. Users do not need to
 select or enter these headers manually.
 
@@ -177,7 +178,7 @@ and never post these values in an issue or pull request. Automatic retrieval
 through a Motorola/5GenCare account is outside the scope of this manual flow.
 
 Owners can retrieve the connection details with
-[`extract_vm85_credentials.ps1`](extract_vm85_credentials.ps1).
+[`extract_vm85_credentials.ps1`](tools/extract_vm85_credentials.ps1).
 Extract Android platform-tools (ADB), enable USB debugging, connect and authorize the
 phone, close any private material visible in the terminal, and run this from
 Windows PowerShell at the repository root:
@@ -187,10 +188,9 @@ powershell -ExecutionPolicy Bypass -File .\tools\extract_vm85_credentials.ps1 `
   -AdbPath C:\platform-tools\adb.exe
 ```
 
-The helper stops any existing Motorola Nursery process so the next launch emits
-a fresh connection sequence. When prompted, manually open Motorola Nursery,
-open the VM85CONNECT live view, wait for video, return to PowerShell, and press
-Enter. If the app log does not reveal the local address, add for example
+Close Motorola Nursery before starting the helper so a new connection is
+logged. When prompted, open the app and view only the target VM85CONNECT. Wait
+for video, return to PowerShell, and press Enter. If the app log does not reveal the local address, add for example
 `-CameraIp 192.168.1.50` or copy the camera address from the router.
 
 The helper prints the camera LAN address, Orbweb SID, Orbweb account, Orbweb
@@ -217,8 +217,8 @@ publishing the password, authentication token, or camera identifiers.
 
 ### The VM85 helper cannot find all values
 
-Run the helper again, allow it to stop the existing Nursery process, then open
-the app and live view only after the PowerShell prompt appears. Wait until video
+Close Motorola Nursery and run the helper again. Open the app and one
+camera's live view when PowerShell prompts you. Wait until video
 is visible before pressing Enter. The phone must be authorized in `adb devices`.
 If only the LAN address is missing, obtain it from the router or pass
 `-CameraIp` explicitly.

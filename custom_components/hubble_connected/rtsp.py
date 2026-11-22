@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import quote
 
 
@@ -32,8 +32,8 @@ class HubbleRtspEndpoint:
     host: str
     port: int
     path: str
-    username: str = ""
-    password: str = ""
+    username: str = field(default="", repr=False)
+    password: str = field(default="", repr=False)
 
     def __post_init__(self) -> None:
         normalized_path = self.path.strip() or "/"

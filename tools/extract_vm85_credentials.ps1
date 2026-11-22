@@ -131,6 +131,9 @@ try {
     Invoke-Adb -Arguments @(
         "shell", "log", "-t", "HA_VM85_SETUP", $marker
     ) 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to start a fresh Android log capture."
+    }
 
     Write-Host "On the phone:" -ForegroundColor Yellow
     Write-Host "  1. Open the Motorola Nursery app manually."
@@ -145,9 +148,10 @@ try {
             Out-String
     )
     $markerPosition = $logText.LastIndexOf($marker, [StringComparison]::Ordinal)
-    if ($markerPosition -ge 0) {
-        $logText = $logText.Substring($markerPosition)
+    if ($LASTEXITCODE -ne 0 -or $markerPosition -lt 0) {
+        throw "Fresh capture marker missing. Start the helper again before opening the live view."
     }
+    $logText = $logText.Substring($markerPosition)
 
     $sid = Get-LastGroupValue $logText `
         'startM2M\s+sid=(?<sid>[A-Za-z0-9._-]+)\s+china=' 'sid'
@@ -160,11 +164,15 @@ try {
     )
     $orbwebPassword = $null
     if ($orbwebDetails.Count -gt 0) {
-        $latestOrbweb = $orbwebDetails[$orbwebDetails.Count - 1]
-        if (-not $sid) {
-            $sid = $latestOrbweb.Groups['sid'].Value.Trim()
+        $capturedSids = @(
+            $orbwebDetails | ForEach-Object { $_.Groups['sid'].Value } |
+                Sort-Object -CaseSensitive -Unique
+        )
+        if ($capturedSids.Count -ne 1 -or ($sid -and $sid -cne $capturedSids[0])) {
+            throw "Multiple camera connections were detected. Open only the target camera and try again."
         }
-        $orbwebPassword = $latestOrbweb.Groups['password'].Value.Trim()
+        $sid = $capturedSids[0]
+        $orbwebPassword = $orbwebDetails[$orbwebDetails.Count - 1].Groups['password'].Value
     }
 
     # Android's JSON log escapes URL slashes as \/. Normalizing those makes the
@@ -178,6 +186,13 @@ try {
     $rtspUsername = $null
     $rtspPassword = $null
     if ($rtspDetails.Count -gt 0) {
+        $capturedRtspCredentials = @(
+            $rtspDetails | ForEach-Object { $_.Value -replace '@127\.0\.0\.1:\d+/$', '' } |
+                Sort-Object -CaseSensitive -Unique
+        )
+        if ($capturedRtspCredentials.Count -ne 1) {
+            throw "Multiple RTSP credential pairs were detected. Open only the target camera and try again."
+        }
         $latestRtsp = $rtspDetails[$rtspDetails.Count - 1]
         $rtspUsername = ConvertFrom-UrlCredential $latestRtsp.Groups['username'].Value
         $rtspPassword = ConvertFrom-UrlCredential $latestRtsp.Groups['password'].Value
@@ -185,7 +200,7 @@ try {
 
     if (-not $CameraIp) {
         $CameraIp = Get-LastGroupValue $logText `
-            '(?:connect|connected)\s+to\s+(?<ip>(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}))\s*:\s*77' 'ip'
+            '(?:connect|connected)\s+to\s+(?<ip>(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}))\s*:\s*77(?!\d)' 'ip'
     }
 
     $missing = @()

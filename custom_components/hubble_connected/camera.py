@@ -63,6 +63,11 @@ async def async_setup_entry(
                         unique_id=binding.unique_id,
                         device_identifier=binding.device_identifier,
                         backend="orbweb_lan",
+                        rtsp_port=binding.rtsp_port,
+                        rtsp_path=binding.rtsp_path,
+                        rtsp_username=binding.rtsp_username,
+                        rtsp_password=binding.rtsp_password,
+                        model=binding.model,
                         orbweb_mappings=orbweb_mappings,
                         rtsp_restream=(
                             entry.runtime_data.rtsp_restream
@@ -92,6 +97,11 @@ class HubbleConnectedCamera(Camera):
         unique_id: str,
         device_identifier: str,
         backend: str,
+        rtsp_port: int = 6667,
+        rtsp_path: str = DIRECT_RTSP_PATH,
+        rtsp_username: str = DIRECT_RTSP_USERNAME,
+        rtsp_password: str = DIRECT_RTSP_PASSWORD,
+        model: str = "Hubble LAN camera",
         orbweb_mappings: OrbwebLanMappingPool | None = None,
         rtsp_restream: HubbleRtspRestreamManager | None = None,
     ) -> None:
@@ -100,6 +110,10 @@ class HubbleConnectedCamera(Camera):
         self.stream_options.update(stream_options_for_backend(backend))
         self._endpoint = endpoint
         self._backend = backend
+        self._rtsp_port = rtsp_port
+        self._rtsp_path = rtsp_path
+        self._rtsp_username = rtsp_username
+        self._rtsp_password = rtsp_password
         self._orbweb_mappings = orbweb_mappings
         self._rtsp_restream = rtsp_restream
         self._orbweb_refresh_task: asyncio.Task[None] | None = None
@@ -110,7 +124,7 @@ class HubbleConnectedCamera(Camera):
             identifiers={(DOMAIN, device_identifier)},
             name=name,
             manufacturer="Hubble Connected / Motorola",
-            model="Hubble LAN camera",
+            model=model,
         )
 
     @property
@@ -138,7 +152,7 @@ class HubbleConnectedCamera(Camera):
                 raise RuntimeError("Orbweb camera has no mapping provider")
             try:
                 mapping = await self._orbweb_mappings.async_get_stable_mapping(
-                    self._stream_key
+                    self._stream_key, self._rtsp_port
                 )
             except (
                 EOFError,
@@ -156,9 +170,9 @@ class HubbleConnectedCamera(Camera):
             source_endpoint = HubbleRtspEndpoint(
                 host=mapping.host,
                 port=mapping.port,
-                path=DIRECT_RTSP_PATH,
-                username=DIRECT_RTSP_USERNAME,
-                password=DIRECT_RTSP_PASSWORD,
+                path=self._rtsp_path,
+                username=self._rtsp_username,
+                password=self._rtsp_password,
             )
             self._endpoint = await self._async_normalize_endpoint(source_endpoint)
         if self._endpoint is None:
@@ -195,14 +209,14 @@ class HubbleConnectedCamera(Camera):
             if self._orbweb_mappings is None:
                 return
             mapping = await self._orbweb_mappings.async_get_stable_mapping(
-                self._stream_key
+                self._stream_key, self._rtsp_port
             )
             source_endpoint = HubbleRtspEndpoint(
                 host=mapping.host,
                 port=mapping.port,
-                path=DIRECT_RTSP_PATH,
-                username=DIRECT_RTSP_USERNAME,
-                password=DIRECT_RTSP_PASSWORD,
+                path=self._rtsp_path,
+                username=self._rtsp_username,
+                password=self._rtsp_password,
             )
             endpoint = await self._async_normalize_endpoint(source_endpoint)
             self._endpoint = endpoint
@@ -225,7 +239,7 @@ class HubbleConnectedCamera(Camera):
     async def _async_normalize_endpoint(
         self, endpoint: HubbleRtspEndpoint
     ) -> HubbleRtspEndpoint:
-        """Normalize malformed 3667 media without changing other camera paths."""
+        """Return the model-specific shared stream when one is configured."""
         if self._rtsp_restream is None:
             return endpoint
         try:
@@ -233,7 +247,7 @@ class HubbleConnectedCamera(Camera):
                 self._stream_key, endpoint
             )
         except HubbleRestreamError as err:
-            _LOGGER.warning("Hubble 3667 media normalization unavailable: %s", err)
+            _LOGGER.warning("Hubble RTSP restream unavailable: %s", err)
             return endpoint
 
     @property

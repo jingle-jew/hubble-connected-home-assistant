@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import ipaddress
+import re
 from dataclasses import dataclass, field
 from hashlib import sha256
+
+_PRIVATE_LAN_NETWORKS = tuple(
+    ipaddress.IPv4Network(network)
+    for network in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+)
 
 
 class ManualOrbwebConfigError(ValueError):
@@ -15,8 +21,8 @@ class ManualOrbwebConfigError(ValueError):
 class ManualOrbwebCamera:
     """Owner-provided connection details for one Orbweb camera."""
 
-    name: str
-    host: str
+    name: str = field(repr=False)
+    host: str = field(repr=False)
     target_id: str = field(repr=False)
     auth_account: str = field(repr=False)
     auth_password: str = field(repr=False)
@@ -57,11 +63,8 @@ def build_manual_orbweb_camera(
         address = ipaddress.ip_address(host.strip())
     except ValueError as err:
         raise ManualOrbwebConfigError("Camera IP address is invalid") from err
-    if (
-        address.version != 4
-        or not address.is_private
-        or address.is_loopback
-        or address.is_multicast
+    if address.version != 4 or not any(
+        address in network for network in _PRIVATE_LAN_NETWORKS
     ):
         raise ManualOrbwebConfigError("Camera must use a private IPv4 LAN address")
 
@@ -73,13 +76,14 @@ def build_manual_orbweb_camera(
         "RTSP username": rtsp_username,
         "RTSP password": rtsp_password,
     }.items():
-        value = value.strip()
-        if not value:
+        if label == "Orbweb SID":
+            value = value.strip()
+            if re.fullmatch(r"[A-Za-z0-9._-]{1,128}", value) is None:
+                raise ManualOrbwebConfigError("Orbweb SID is invalid")
+        if not value.strip():
             raise ManualOrbwebConfigError(f"{label} must not be empty")
-        if not value.isascii():
-            raise ManualOrbwebConfigError(f"{label} must contain ASCII only")
-        if label == "Orbweb SID" and len(value) > 128:
-            raise ManualOrbwebConfigError("Orbweb SID is too long")
+        if not value.isascii() or not value.isprintable():
+            raise ManualOrbwebConfigError(f"{label} must contain printable ASCII")
         normalized[label] = value
 
     return ManualOrbwebCamera(

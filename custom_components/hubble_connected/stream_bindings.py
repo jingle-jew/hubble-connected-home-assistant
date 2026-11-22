@@ -6,8 +6,10 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 
 from .cloud import HubbleCloudCamera
+from .const import DIRECT_RTSP_PASSWORD, DIRECT_RTSP_PATH, DIRECT_RTSP_USERNAME
 from .discovery import normalize_mac
 from .local import HubbleLocalCameraSpec
+from .manual_orbweb import ManualOrbwebCamera
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,12 +17,18 @@ class HubbleOrbwebStreamBinding:
     """Non-lossy link between one owned cloud camera and an Orbweb stream."""
 
     key: str
-    name: str
+    name: str = field(repr=False)
     unique_id: str
     device_identifier: str
-    route_host: str | None
+    route_host: str | None = field(repr=False)
     target_id: str = field(repr=False)
     auth_password: str = field(repr=False)
+    auth_account: str | None = field(default=None, repr=False)
+    rtsp_port: int = 6667
+    rtsp_path: str = DIRECT_RTSP_PATH
+    rtsp_username: str = field(default=DIRECT_RTSP_USERNAME, repr=False)
+    rtsp_password: str = field(default=DIRECT_RTSP_PASSWORD, repr=False)
+    model: str = "Hubble LAN camera"
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +40,27 @@ class HubbleOrbwebCommandBinding:
     route_host: str | None
     target_id: str = field(repr=False)
     auth_password: str = field(repr=False)
+
+
+def build_manual_orbweb_stream_binding(
+    camera: ManualOrbwebCamera,
+) -> HubbleOrbwebStreamBinding:
+    """Build an isolated stream binding for an owner-provisioned camera."""
+    return HubbleOrbwebStreamBinding(
+        key=camera.key,
+        name=camera.name,
+        unique_id=camera.unique_id,
+        device_identifier=camera.key,
+        route_host=camera.host,
+        target_id=camera.target_id,
+        auth_account=camera.auth_account,
+        auth_password=camera.auth_password,
+        rtsp_port=camera.rtsp_port,
+        rtsp_path=camera.rtsp_path,
+        rtsp_username=camera.rtsp_username,
+        rtsp_password=camera.rtsp_password,
+        model=camera.model,
+    )
 
 
 def build_orbweb_command_bindings(

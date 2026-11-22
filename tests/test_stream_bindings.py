@@ -29,9 +29,12 @@ def load(name: str):
     return module
 
 
+load("const")
 cloud = load("cloud")
 local = load("local")
 load("discovery")
+manual = load("manual_orbweb")
+rtsp = load("rtsp")
 bindings = load("stream_bindings")
 
 
@@ -66,6 +69,62 @@ def camera(
 
 class HubbleStreamBindingTests(unittest.TestCase):
     """Keep Orbweb video independent from optional LAN metadata."""
+
+    def test_manual_vm85_uses_separate_credentials_without_exposing_them(self) -> None:
+        camera = manual.build_manual_orbweb_camera(
+            name="Nursery VM85",
+            host="192.168.50.20",
+            target_id="synthetic-vm85-sid",
+            auth_account="vm85-account",
+            auth_password="orbweb-secret",
+            rtsp_username="rtsp-user",
+            rtsp_password=" stream@secret ",
+        )
+        binding = bindings.build_manual_orbweb_stream_binding(camera)
+        endpoint = rtsp.HubbleRtspEndpoint(
+            "127.0.0.1",
+            31000,
+            binding.rtsp_path,
+            binding.rtsp_username,
+            binding.rtsp_password,
+        )
+        self.assertEqual(binding.route_host, camera.host)
+        self.assertEqual(binding.auth_account, "vm85-account")
+        self.assertEqual(binding.auth_password, "orbweb-secret")
+        self.assertEqual(binding.rtsp_port, 6667)
+        self.assertEqual(
+            endpoint.url,
+            "rtsp://rtsp-user:%20stream%40secret%20@127.0.0.1:31000/blinkhd",
+        )
+        self.assertEqual(binding.unique_id, f"{camera.key}:camera")
+        for private_value in (
+            camera.name,
+            camera.host,
+            camera.target_id,
+            camera.auth_account,
+            camera.auth_password,
+            camera.rtsp_username,
+            camera.rtsp_password,
+        ):
+            self.assertNotIn(private_value, repr(camera))
+            self.assertNotIn(private_value, repr(binding))
+            self.assertNotIn(private_value, repr(endpoint))
+
+    def test_manual_vm85_rejects_hosts_outside_private_lan_ranges(self) -> None:
+        for host in ("127.0.0.1", "169.254.1.1", "192.0.2.10", "0.0.0.0", "::1"):
+            with (
+                self.subTest(host=host),
+                self.assertRaises(manual.ManualOrbwebConfigError),
+            ):
+                manual.build_manual_orbweb_camera(
+                    name="Nursery VM85",
+                    host=host,
+                    target_id="synthetic-vm85-sid",
+                    auth_account="vm85-account",
+                    auth_password="orbweb-secret",
+                    rtsp_username="rtsp-user",
+                    rtsp_password="rtsp-secret",
+                )
 
     def test_cloud_camera_without_mac_still_gets_orbweb_binding(self) -> None:
         result = bindings.build_orbweb_stream_bindings(
