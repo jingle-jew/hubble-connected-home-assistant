@@ -2,12 +2,12 @@
 
 All notable changes will be documented here.
 
-## 0.1.0-beta.1 - Unreleased
+## 0.1.0-beta.2 - 2026-11-22
 
-- Add native same-LAN Orbweb video without Android or Java.
-- Add stable loopback RTSP endpoints with renewable encrypted transports.
-- Add direct RTSP discovery for compatible legacy cameras.
-- Add temperature, connectivity, Wi-Fi, and bitrate sensors.
+- Add manual setup and local Orbweb video and audio for Motorola VM85CONNECT.
+- Add HubbleClub for Partners sign-in and live video for Luvion Essential Connect
+  (model 1844), using a shared stream for multiple viewers.
+- Improve cloud discovery for model 3667.
 - Read the 3667 temperature, Wi-Fi strength, and video bitrate locally through
   the authenticated Orbweb mapping instead of cloud `publish_command` jobs.
 - Read 3667 brightness, night-vision mode, and ceiling-mount state through the
@@ -15,9 +15,20 @@ All notable changes will be documented here.
   settings plus video bitrate.
 - Do not expose 3667 contrast entities: its local `get_contrast` command returns
   HTTP 204 and the official app excludes contrast for this model family.
-- Add verified night-vision, bitrate, indicator-LED, and image-flip controls.
 - Add verified image-brightness and image-contrast sensors and controls for
   compatible local cameras.
 - Suppress image controls on the 0667, where changing an image level terminates
   the direct RTSP service.
+- Document installation through the Home Assistant Marketplace.
+
+Thanks to @twoenter for the HubbleClub for Partners and Motorola Nursery pull
+requests.
+
+## 0.1.0-beta.1 - 2026-08-09
+
+- Add native same-LAN Orbweb video without Android or Java.
+- Add stable loopback RTSP endpoints with renewable encrypted transports.
+- Add direct RTSP discovery for compatible legacy cameras.
+- Add temperature, connectivity, Wi-Fi, and bitrate sensors.
+- Add verified night-vision, bitrate, indicator-LED, and image-flip controls.
 - Redact camera and account identifiers from diagnostics.

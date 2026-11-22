@@ -93,11 +93,18 @@ can still vary by hardware revision, region, and firmware version.
 To report results for another camera model, open a GitHub issue with the model,
 firmware version, and redacted diagnostics.
 
+<!-- ha-marketplace:exclude-start -->
 ## Installation
 
-### HACS custom repository
+### Home Assistant Marketplace (2026.11 and later)
 
-To install the integration with HACS:
+1. Open **Settings > Marketplace** and select **Add from link**.
+2. Enter `https://github.com/jingle-jew/hubble-connected-home-assistant` and
+   connect GitHub if prompted. If asked for a type, choose **Integration**.
+3. Open **Hubble Connected** in the Marketplace and choose **Install**.
+   Beta releases require the repository's **Pre-release** switch.
+
+### HACS on earlier Home Assistant versions
 
 1. Open **HACS > Integrations > Custom repositories**.
 2. Add `https://github.com/jingle-jew/hubble-connected-home-assistant` as an
@@ -111,6 +118,7 @@ To install the integration with HACS:
 Copy `custom_components/hubble_connected` to
 `<home-assistant-config>/custom_components/hubble_connected`, restart Home
 Assistant, and add the integration from **Settings > Devices & services**.
+<!-- ha-marketplace:exclude-end -->
 
 ## Configuration
 
