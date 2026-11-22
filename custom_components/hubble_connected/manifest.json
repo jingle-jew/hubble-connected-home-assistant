@@ -9,5 +9,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/jingle-jew/hubble-connected-home-assistant/issues",
   "requirements": [],
-  "version": "0.1.0-beta.2"
+  "version": "0.1.1-beta.2"
 }

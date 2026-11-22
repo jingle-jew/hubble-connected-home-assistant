@@ -2,6 +2,15 @@
 
 All notable changes will be documented here.
 
+## 0.1.1-beta.2 - 2026-11-22
+
+- Add an optional local IP address for each model 3667 camera during setup
+  and in the integration options. Automatic MAC matching is available when
+  the address is left blank.
+- Group the model 3667 video, sensors, and controls under one Home Assistant
+  device. Migrate existing matched devices while preserving their local camera
+  entity ID.
+
 ## 0.1.0-beta.2 - 2026-11-22
 
 - Add manual setup and local Orbweb video and audio for Motorola VM85CONNECT.
