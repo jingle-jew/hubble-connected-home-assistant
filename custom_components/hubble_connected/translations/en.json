@@ -60,7 +60,7 @@
           "rtsp_username": "Enter the username used to access this camera’s video stream.",
           "rtsp_password": "Enter the password used to access this camera’s video stream."
         },
-        "description": "Connect your VM85CONNECT to the same local network as Home Assistant. Have the camera’s Orbweb and RTSP details ready.\n\n[VM85CONNECT setup guide](https://github.com/jingle-jew/hubble-connected-home-assistant#motorola-vm85connect-manual)",
+        "description": "Connect your VM85CONNECT to the same local network as Home Assistant. Have the camera’s Orbweb and RTSP details ready.\n\n[VM85CONNECT setup guide]({setup_guide_url})",
         "title": "Motorola VM85CONNECT"
       },
       "camera_lan": {

@@ -49,6 +49,11 @@ from .local import (
 )
 from .manual_orbweb import ManualOrbwebConfigError, build_manual_orbweb_camera
 
+VM85_SETUP_GUIDE_URL = (
+    "https://github.com/jingle-jew/hubble-connected-home-assistant"
+    "#motorola-vm85connect-manual"
+)
+
 
 def _user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     defaults = defaults or {}
@@ -248,6 +253,7 @@ class HubbleConnectedConfigFlow(_HubbleCameraLanFlow, ConfigFlow, domain=DOMAIN)
             step_id=PROVIDER_MANUAL_VM85,
             data_schema=_manual_vm85_schema(defaults),
             errors=errors,
+            description_placeholders={"setup_guide_url": VM85_SETUP_GUIDE_URL},
         )
 
     @staticmethod
