@@ -20,18 +20,27 @@
           "hubble": "Compte Hubble Connected",
           "manual_vm85": "Motorola VM85CONNECT (manuel)"
         },
-        "description": "Choisis comment cette caméra est configurée.",
+        "menu_option_descriptions": {
+          "hubble": "Retrouve tes caméras via ton compte Hubble ou ajoute des caméras compatibles par adresse IP locale.",
+          "manual_vm85": "Utilise les paramètres de connexion Orbweb et RTSP de ta VM85CONNECT."
+        },
+        "description": "Choisis comment connecter ta caméra.",
         "title": "Hubble Connected / Motorola"
       },
       "hubble": {
         "data": {
           "cloud_login": "Courriel du compte Hubble (facultatif)",
           "cloud_password": "Mot de passe Hubble",
-          "cloud_camera_ids": "Identifiants de secours à ajouter manuellement (séparés par des virgules)",
-          "local_cameras": "Caméras locales (Nom=IP, séparées par des virgules)",
+          "cloud_camera_ids": "Identifiants d’enregistrement Hubble (facultatif)",
+          "local_cameras": "Caméras locales (facultatif)",
           "name": "Nom de l’intégration"
         },
-        "description": "Les identifiants Hubble découvrent tes caméras et activent la vidéo LAN Orbweb native sans Android. Les 3667 omises sont récupérées automatiquement depuis l’inventaire des abonnements du compte. Les identifiants manuels et la liste locale restent des solutions de secours facultatives. Tu pourras associer une adresse IP à chaque 3667 à l’étape suivante.",
+        "data_description": {
+          "cloud_login": "Utilise le courriel de ton application Hubble. Laisse le courriel et le mot de passe vides pour une configuration locale.",
+          "cloud_camera_ids": "Si une caméra manque dans ton compte, saisis ici son identifiant d’enregistrement Hubble. Sépare les identifiants par des virgules.",
+          "local_cameras": "Ajoute des caméras compatibles par nom et adresse IP, par exemple Chambre=192.168.1.50, Bureau=192.168.1.51. Laisse le champ vide si tes caméras sont découvertes automatiquement."
+        },
+        "description": "Connecte-toi à ton compte Hubble pour retrouver tes caméras. Si une 3667 est détectée, tu pourras préciser son adresse IP locale à l’étape suivante.",
         "title": "Hubble Connected"
       },
       "manual_vm85": {
@@ -44,14 +53,24 @@
           "rtsp_username": "Nom d’utilisateur RTSP",
           "rtsp_password": "Mot de passe RTSP"
         },
-        "description": "Configuration avancée d’une Motorola VM85CONNECT dont tu es propriétaire. La caméra et Home Assistant doivent être sur le même réseau local.",
+        "data_description": {
+          "orbweb_host": "Saisis l’adresse IPv4 privée de la caméra. Tu peux la trouver dans la liste des appareils connectés à ton routeur.",
+          "orbweb_sid": "Saisis le SID propre à la caméra, relevé dans ta session Motorola Nursery.",
+          "orbweb_password": "Saisis le mot de passe Orbweb de la caméra relevé dans la même session.",
+          "rtsp_username": "Saisis le nom d’utilisateur qui donne accès au flux vidéo de cette caméra.",
+          "rtsp_password": "Saisis le mot de passe qui donne accès au flux vidéo de cette caméra."
+        },
+        "description": "Connecte ta VM85CONNECT au même réseau local que Home Assistant. Prépare les paramètres Orbweb et RTSP de la caméra.\n\n[Guide de configuration VM85CONNECT (en anglais)](https://github.com/jingle-jew/hubble-connected-home-assistant#motorola-vm85connect-manual)",
         "title": "Motorola VM85CONNECT"
       },
       "camera_lan": {
         "data": {
           "camera_host": "Adresse IP locale (facultative)"
         },
-        "description": "Associe le flux vidéo local à « {camera_name} » (modèle 3667). Laisse le champ vide pour utiliser la détection automatique.",
+        "data_description": {
+          "camera_host": "Laisse le champ vide pour la détection automatique. Si la vidéo locale est introuvable, saisis l’adresse IP privée de la caméra, par exemple 192.168.1.50."
+        },
+        "description": "Associe la vidéo locale à « {camera_name} » pour retrouver le flux, les capteurs et les commandes sur le même appareil Home Assistant.",
         "title": "Vidéo locale de la caméra 3667"
       }
     }
@@ -125,29 +144,40 @@
       "init": {
         "data": {
           "cloud_login": "Courriel du compte Hubble (facultatif)",
-          "cloud_password": "Mot de passe Hubble (laisser vide pour conserver celui enregistré)",
-          "cloud_camera_ids": "Identifiants de secours à ajouter manuellement (séparés par des virgules)",
-          "local_cameras": "Caméras locales (Nom=IP, séparées par des virgules)"
+          "cloud_password": "Mot de passe Hubble",
+          "cloud_camera_ids": "Identifiants d’enregistrement Hubble (facultatif)",
+          "local_cameras": "Caméras locales (facultatif)"
         },
-        "description": "La vidéo LAN Orbweb native fonctionne sans Android pour les caméras associées au cloud. Les 3667 omises sont récupérées automatiquement depuis l’inventaire des abonnements du compte. Les identifiants manuels et la liste locale restent des solutions de secours facultatives. Tu pourras associer une adresse IP à chaque 3667 à l’étape suivante.",
+        "data_description": {
+          "cloud_password": "Laisse le champ vide pour conserver le mot de passe enregistré.",
+          "cloud_camera_ids": "Saisis l’identifiant d’enregistrement Hubble de chaque caméra absente de ton compte. Sépare les identifiants par des virgules.",
+          "local_cameras": "Saisis les caméras à ajouter manuellement au format Chambre=192.168.1.50, Bureau=192.168.1.51."
+        },
+        "description": "Modifie ton compte Hubble ou la liste des caméras ajoutées manuellement. À l’étape suivante, tu pourras revoir l’adresse IP locale de chaque 3667 détectée.",
         "title": "Caméras Hubble"
       },
       "manual_vm85": {
         "data": {
-          "orbweb_host": "Adresse IP locale de la caméra",
+          "orbweb_host": "Adresse IP locale de la caméra (facultative)",
           "orbweb_account": "Compte Orbweb",
-          "orbweb_password": "Mot de passe Orbweb (laisser vide pour conserver la valeur enregistrée)",
-          "rtsp_username": "Nom d’utilisateur RTSP (laisser vide pour conserver la valeur enregistrée)",
-          "rtsp_password": "Mot de passe RTSP (laisser vide pour conserver la valeur enregistrée)"
+          "orbweb_password": "Mot de passe Orbweb",
+          "rtsp_username": "Nom d’utilisateur RTSP",
+          "rtsp_password": "Mot de passe RTSP"
         },
-        "description": "Modifie les paramètres VM85 fournis par le propriétaire. Les secrets enregistrés ne sont jamais affichés.",
+        "data_description": {
+          "orbweb_host": "Laisse le champ vide pour conserver l’adresse enregistrée. Si l’adresse IPv4 privée de la caméra a changé, saisis la nouvelle adresse ici."
+        },
+        "description": "Modifie les paramètres de connexion de cette VM85CONNECT. Laisse le mot de passe Orbweb et les deux champs RTSP vides pour conserver les valeurs enregistrées.",
         "title": "Motorola VM85CONNECT"
       },
       "camera_lan": {
         "data": {
           "camera_host": "Adresse IP locale (facultative)"
         },
-        "description": "Associe le flux vidéo local à « {camera_name} » (modèle 3667). Laisse le champ vide pour utiliser la détection automatique.",
+        "data_description": {
+          "camera_host": "Saisis la nouvelle adresse IP privée de la caméra si elle a changé. Efface l’adresse enregistrée pour revenir à la détection automatique."
+        },
+        "description": "Modifie l’adresse du flux vidéo local de « {camera_name} ». Le flux, les capteurs et les commandes sont regroupés sur le même appareil Home Assistant.",
         "title": "Vidéo locale de la caméra 3667"
       }
     }

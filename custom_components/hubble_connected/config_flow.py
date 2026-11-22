@@ -134,7 +134,9 @@ class _HubbleCameraLanFlow:
             step_id="camera_lan",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(CONF_CAMERA_HOST, default=default): str,
+                    vol.Optional(
+                        CONF_CAMERA_HOST, description={"suggested_value": default}
+                    ): str,
                 }
             ),
             description_placeholders={"camera_name": camera.name},
@@ -334,14 +336,14 @@ class HubbleConnectedOptionsFlow(_HubbleCameraLanFlow, OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
+                    vol.Optional(
                         CONF_LOCAL_CAMERAS,
-                        default=defaults.get(
-                            CONF_LOCAL_CAMERAS,
-                            self.config_entry.data.get(
+                        default=DEFAULT_LOCAL_CAMERAS,
+                        description={
+                            "suggested_value": saved(
                                 CONF_LOCAL_CAMERAS, DEFAULT_LOCAL_CAMERAS
-                            ),
-                        ),
+                            )
+                        },
                     ): str,
                     vol.Optional(
                         CONF_CLOUD_LOGIN,
@@ -382,6 +384,9 @@ class HubbleConnectedOptionsFlow(_HubbleCameraLanFlow, OptionsFlow):
             )
 
         if user_input is not None:
+            host = user_input.get(CONF_ORBWEB_HOST, "").strip() or saved(
+                CONF_ORBWEB_HOST
+            )
             for secret_key in (
                 CONF_ORBWEB_PASSWORD,
                 CONF_RTSP_USERNAME,
@@ -392,7 +397,7 @@ class HubbleConnectedOptionsFlow(_HubbleCameraLanFlow, OptionsFlow):
             try:
                 build_manual_orbweb_camera(
                     name=self.config_entry.title,
-                    host=user_input[CONF_ORBWEB_HOST],
+                    host=host,
                     target_id=saved(CONF_ORBWEB_SID),
                     auth_account=user_input[CONF_ORBWEB_ACCOUNT],
                     auth_password=user_input[CONF_ORBWEB_PASSWORD],
@@ -402,6 +407,7 @@ class HubbleConnectedOptionsFlow(_HubbleCameraLanFlow, OptionsFlow):
             except ManualOrbwebConfigError:
                 errors["base"] = "invalid_manual_orbweb"
             else:
+                user_input[CONF_ORBWEB_HOST] = host
                 user_input[CONF_PROVIDER] = PROVIDER_MANUAL_VM85
                 return self.async_create_entry(title="", data=user_input)
 
@@ -422,6 +428,7 @@ def _manual_vm85_schema(
 ) -> vol.Schema:
     """Return the manual VM85 form without ever redisplaying saved secrets."""
     fields: dict[vol.Marker, Any] = {}
+    connection_field = vol.Optional if options else vol.Required
     if not options:
         fields[vol.Required(CONF_NAME, default=defaults.get(CONF_NAME, "VM85"))] = str
         fields[vol.Required(CONF_ORBWEB_SID)] = selector.TextSelector(
@@ -429,20 +436,21 @@ def _manual_vm85_schema(
         )
     fields.update(
         {
-            vol.Required(
-                CONF_ORBWEB_HOST, default=defaults.get(CONF_ORBWEB_HOST, "")
+            connection_field(
+                CONF_ORBWEB_HOST,
+                description={"suggested_value": defaults.get(CONF_ORBWEB_HOST, "")},
             ): str,
             vol.Required(
                 CONF_ORBWEB_ACCOUNT,
                 default=defaults.get(CONF_ORBWEB_ACCOUNT, VM85_ORBWEB_ACCOUNT),
             ): str,
-            vol.Required(CONF_ORBWEB_PASSWORD, default=""): selector.TextSelector(
+            connection_field(CONF_ORBWEB_PASSWORD, default=""): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
             ),
-            vol.Required(CONF_RTSP_USERNAME, default=""): selector.TextSelector(
+            connection_field(CONF_RTSP_USERNAME, default=""): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
             ),
-            vol.Required(CONF_RTSP_PASSWORD, default=""): selector.TextSelector(
+            connection_field(CONF_RTSP_PASSWORD, default=""): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
             ),
         }
