@@ -158,6 +158,10 @@ The cloud API is not used to publish those getter commands. **Cloud camera
 identifiers omitted from inventory** remains available in the integration
 options as a manual fallback. Identifiers are excluded from diagnostics.
 
+During setup or in the integration options, you can enter the LAN IP for each
+detected 3667. Leave it blank to use automatic MAC matching. Linked video,
+sensors, and controls appear under one Home Assistant device.
+
 The integration first matches owned cloud devices against complete entries in
 Home Assistant's ARP table by exact MAC address. Those authenticated cloud
 matches remain eligible for Orbweb video even when the optional local HTTP

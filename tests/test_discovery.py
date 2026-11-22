@@ -7,6 +7,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 PACKAGE = "hubble_discovery_test"
 package = types.ModuleType(PACKAGE)
@@ -155,6 +156,7 @@ class HubbleAsyncDiscoveryTests(unittest.IsolatedAsyncioTestCase):
 
         camera = types.SimpleNamespace(
             name="Basement",
+            registration_id="XX3667-test-camera",
             mac_address="02:00:00:00:00:03",
         )
         original_client = discovery.HubbleLocalClient
@@ -182,6 +184,7 @@ class HubbleAsyncDiscoveryTests(unittest.IsolatedAsyncioTestCase):
 
         camera = types.SimpleNamespace(
             name="Basement",
+            registration_id="XX3667-test-camera",
             mac_address="02:00:00:00:00:03",
         )
         configured = (
@@ -199,6 +202,40 @@ class HubbleAsyncDiscoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(specs[0].name, "Manual basement")
         self.assertEqual(specs[0].source, "manual")
         self.assertEqual(specs[0].cloud_mac, "020000000003")
+
+    async def test_manual_address_matches_cloud_mac_even_with_empty_arp(self) -> None:
+        hass = types.SimpleNamespace(async_add_executor_job=AsyncMock(return_value=""))
+        camera = types.SimpleNamespace(
+            name="Cloud camera",
+            registration_id="XX3667-test-camera",
+            mac_address="02:00:00:00:00:03",
+            model_code="3667",
+        )
+        spec = local.HubbleLocalCameraSpec(name="Local camera", host="192.168.50.12")
+        with patch.object(
+            discovery.HubbleLocalClient, "async_get_mac_address", new_callable=AsyncMock
+        ) as read_mac:
+            read_mac.return_value = "02:00:00:00:00:03"
+            specs = await discovery.async_discover_cloud_cameras(
+                hass, (camera,), (spec,)
+            )
+
+        self.assertEqual(specs[0].cloud_3667_id, camera.registration_id)
+        self.assertEqual(discovery.select_local_entity_specs(specs, (camera,)), ())
+
+    async def test_explicit_route_works_without_arp_or_cloud_data(self) -> None:
+        hass = types.SimpleNamespace(
+            async_add_executor_job=AsyncMock(side_effect=OSError)
+        )
+        registration_id = "XX3667-test-camera"
+        specs = await discovery.async_discover_cloud_cameras(
+            hass, (), (), {registration_id: "192.168.50.12"}
+        )
+
+        self.assertEqual(len(specs), 1)
+        self.assertEqual(specs[0].host, "192.168.50.12")
+        self.assertEqual(specs[0].cloud_3667_id, registration_id)
+        self.assertEqual(discovery.select_local_entity_specs(specs, ()), ())
 
     async def test_unknown_arp_neighbor_still_requires_local_verification(self) -> None:
         table = """IP address HW type Flags HW address Mask Device

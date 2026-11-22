@@ -46,6 +46,13 @@ class HubbleLocalCameraSpec:
     host: str
     source: str = "manual"
     cloud_mac: str | None = None
+    cloud_registration_id: str | None = None
+
+    @property
+    def cloud_3667_id(self) -> str | None:
+        """Use the registration as device identity for associated 3667 cameras."""
+        registration_id = self.cloud_registration_id or ""
+        return registration_id if registration_id[2:6] == "3667" else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,20 +101,28 @@ def parse_local_camera_specs(value: str) -> tuple[HubbleLocalCameraSpec, ...]:
             name = f"Hubble {host}"
         if not name:
             raise HubbleLocalConfigError("A camera name cannot be empty")
-        try:
-            address = ipaddress.ip_address(host)
-        except ValueError as err:
-            raise HubbleLocalConfigError(f"Invalid camera IP: {host}") from err
-        if not address.is_private or address.is_loopback or address.is_multicast:
-            raise HubbleLocalConfigError(
-                f"Camera IP must be a private LAN address: {host}"
-            )
-        normalized_host = str(address)
+        normalized_host = parse_local_camera_host(host)
         if normalized_host in seen_hosts:
             raise HubbleLocalConfigError(f"Duplicate camera IP: {host}")
         seen_hosts.add(normalized_host)
         specs.append(HubbleLocalCameraSpec(name=name, host=normalized_host))
     return tuple(specs)
+
+
+def parse_local_camera_host(value: str) -> str:
+    """Validate and normalize one private LAN address."""
+    try:
+        address = ipaddress.ip_address(value.strip())
+    except ValueError as err:
+        raise HubbleLocalConfigError("Invalid camera IP") from err
+    if (
+        not address.is_private
+        or address.is_loopback
+        or address.is_multicast
+        or address.is_unspecified
+    ):
+        raise HubbleLocalConfigError("Camera IP must be a private LAN address")
+    return str(address)
 
 
 def parse_temperature(response: str) -> float:

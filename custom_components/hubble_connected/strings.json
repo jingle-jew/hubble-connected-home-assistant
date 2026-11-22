@@ -10,7 +10,9 @@
       "cloud_invalid_response": "The Hubble cloud returned an unsupported response",
       "invalid_cloud_camera_ids": "The manual cloud camera identifier list is invalid",
       "invalid_camera_list": "The local camera list is invalid",
-      "invalid_manual_orbweb": "The manual Orbweb camera details are invalid"
+      "invalid_manual_orbweb": "The manual Orbweb camera details are invalid",
+      "invalid_camera_host": "Enter a valid private IP address.",
+      "duplicate_camera_host": "This IP address is already linked to another camera."
     },
     "step": {
       "user": {
@@ -29,7 +31,7 @@
           "local_cameras": "Local cameras (Name=IP, separated by commas)",
           "name": "Integration name"
         },
-        "description": "Hubble cloud credentials discover your owned cameras and enable native Orbweb LAN video without Android. Omitted 3667 cameras are recovered automatically from the account subscription inventory. Manual camera identifiers and the local list remain optional fallbacks.",
+        "description": "Hubble cloud credentials discover your owned cameras and enable native Orbweb LAN video without Android. Omitted 3667 cameras are recovered automatically from the account subscription inventory. Manual camera identifiers and the local list remain optional fallbacks. You can link a local IP address to each 3667 in the next step.",
         "title": "Hubble Connected"
       },
       "manual_vm85": {
@@ -44,6 +46,13 @@
         },
         "description": "Advanced setup for an owned Motorola VM85CONNECT. The camera must be on the same LAN as Home Assistant. Obtain the device-specific SID and Orbweb password from your own Motorola Nursery app session.",
         "title": "Motorola VM85CONNECT"
+      },
+      "camera_lan": {
+        "data": {
+          "camera_host": "Local IP address (optional)"
+        },
+        "description": "Link the local video stream to “{camera_name}” (model 3667). Leave the address blank to use automatic discovery.",
+        "title": "3667 camera local video"
       }
     }
   },
@@ -108,7 +117,9 @@
       "cloud_invalid_response": "The Hubble cloud returned an unsupported response",
       "invalid_cloud_camera_ids": "The manual cloud camera identifier list is invalid",
       "invalid_camera_list": "The local camera list is invalid",
-      "invalid_manual_orbweb": "The manual Orbweb camera details are invalid"
+      "invalid_manual_orbweb": "The manual Orbweb camera details are invalid",
+      "invalid_camera_host": "Enter a valid private IP address.",
+      "duplicate_camera_host": "This IP address is already linked to another camera."
     },
     "step": {
       "init": {
@@ -118,7 +129,7 @@
           "cloud_camera_ids": "Manual fallback camera identifiers (comma-separated)",
           "local_cameras": "Local cameras (Name=IP, separated by commas)"
         },
-        "description": "Native Orbweb LAN video works without Android for cloud-matched cameras. Omitted 3667 cameras are recovered automatically from the account subscription inventory. Manual camera identifiers and the local list remain optional fallbacks.",
+        "description": "Native Orbweb LAN video works without Android for cloud-matched cameras. Omitted 3667 cameras are recovered automatically from the account subscription inventory. Manual camera identifiers and the local list remain optional fallbacks. You can link a local IP address to each 3667 in the next step.",
         "title": "Hubble cameras"
       },
       "manual_vm85": {
@@ -131,6 +142,13 @@
         },
         "description": "Update the owner-provided VM85 connection details. Saved secrets are never displayed.",
         "title": "Motorola VM85CONNECT"
+      },
+      "camera_lan": {
+        "data": {
+          "camera_host": "Local IP address (optional)"
+        },
+        "description": "Link the local video stream to “{camera_name}” (model 3667). Leave the address blank to use automatic discovery.",
+        "title": "3667 camera local video"
       }
     }
   }

@@ -10,7 +10,9 @@
       "cloud_invalid_response": "Le cloud Hubble a retourné une réponse non prise en charge",
       "invalid_cloud_camera_ids": "La liste des identifiants de caméras cloud est invalide",
       "invalid_camera_list": "La liste des caméras locales est invalide",
-      "invalid_manual_orbweb": "Les paramètres manuels de la caméra Orbweb sont invalides"
+      "invalid_manual_orbweb": "Les paramètres manuels de la caméra Orbweb sont invalides",
+      "invalid_camera_host": "Saisis une adresse IP privée valide.",
+      "duplicate_camera_host": "Cette adresse est déjà associée à une autre caméra."
     },
     "step": {
       "user": {
@@ -29,7 +31,7 @@
           "local_cameras": "Caméras locales (Nom=IP, séparées par des virgules)",
           "name": "Nom de l’intégration"
         },
-        "description": "Les identifiants Hubble découvrent tes caméras et activent la vidéo LAN Orbweb native sans Android. Les 3667 omises sont récupérées automatiquement depuis l’inventaire des abonnements du compte. Les identifiants manuels et la liste locale restent des solutions de secours facultatives.",
+        "description": "Les identifiants Hubble découvrent tes caméras et activent la vidéo LAN Orbweb native sans Android. Les 3667 omises sont récupérées automatiquement depuis l’inventaire des abonnements du compte. Les identifiants manuels et la liste locale restent des solutions de secours facultatives. Tu pourras associer une adresse IP à chaque 3667 à l’étape suivante.",
         "title": "Hubble Connected"
       },
       "manual_vm85": {
@@ -44,6 +46,13 @@
         },
         "description": "Configuration avancée d’une Motorola VM85CONNECT dont tu es propriétaire. La caméra et Home Assistant doivent être sur le même réseau local.",
         "title": "Motorola VM85CONNECT"
+      },
+      "camera_lan": {
+        "data": {
+          "camera_host": "Adresse IP locale (facultative)"
+        },
+        "description": "Associe le flux vidéo local à « {camera_name} » (modèle 3667). Laisse le champ vide pour utiliser la détection automatique.",
+        "title": "Vidéo locale de la caméra 3667"
       }
     }
   },
@@ -108,7 +117,9 @@
       "cloud_invalid_response": "Le cloud Hubble a retourné une réponse non prise en charge",
       "invalid_cloud_camera_ids": "La liste des identifiants de caméras cloud est invalide",
       "invalid_camera_list": "La liste des caméras locales est invalide",
-      "invalid_manual_orbweb": "Les paramètres manuels de la caméra Orbweb sont invalides"
+      "invalid_manual_orbweb": "Les paramètres manuels de la caméra Orbweb sont invalides",
+      "invalid_camera_host": "Saisis une adresse IP privée valide.",
+      "duplicate_camera_host": "Cette adresse est déjà associée à une autre caméra."
     },
     "step": {
       "init": {
@@ -118,7 +129,7 @@
           "cloud_camera_ids": "Identifiants de secours à ajouter manuellement (séparés par des virgules)",
           "local_cameras": "Caméras locales (Nom=IP, séparées par des virgules)"
         },
-        "description": "La vidéo LAN Orbweb native fonctionne sans Android pour les caméras associées au cloud. Les 3667 omises sont récupérées automatiquement depuis l’inventaire des abonnements du compte. Les identifiants manuels et la liste locale restent des solutions de secours facultatives.",
+        "description": "La vidéo LAN Orbweb native fonctionne sans Android pour les caméras associées au cloud. Les 3667 omises sont récupérées automatiquement depuis l’inventaire des abonnements du compte. Les identifiants manuels et la liste locale restent des solutions de secours facultatives. Tu pourras associer une adresse IP à chaque 3667 à l’étape suivante.",
         "title": "Caméras Hubble"
       },
       "manual_vm85": {
@@ -131,6 +142,13 @@
         },
         "description": "Modifie les paramètres VM85 fournis par le propriétaire. Les secrets enregistrés ne sont jamais affichés.",
         "title": "Motorola VM85CONNECT"
+      },
+      "camera_lan": {
+        "data": {
+          "camera_host": "Adresse IP locale (facultative)"
+        },
+        "description": "Associe le flux vidéo local à « {camera_name} » (modèle 3667). Laisse le champ vide pour utiliser la détection automatique.",
+        "title": "Vidéo locale de la caméra 3667"
       }
     }
   }

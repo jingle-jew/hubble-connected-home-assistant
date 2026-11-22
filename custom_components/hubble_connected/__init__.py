@@ -13,6 +13,7 @@ from homeassistant.components.go2rtc import _DATA_GO2RTC
 from homeassistant.components.go2rtc.const import HA_MANAGED_URL
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -23,6 +24,7 @@ from .cloud import (
     parse_cloud_camera_ids,
 )
 from .const import (
+    CONF_CLOUD_CAMERA_HOSTS,
     CONF_CLOUD_CAMERA_IDS,
     CONF_CLOUD_LOGIN,
     CONF_CLOUD_PASSWORD,
@@ -38,6 +40,7 @@ from .const import (
     DIRECT_RTSP_PATH,
     DIRECT_RTSP_PORT,
     DIRECT_RTSP_USERNAME,
+    DOMAIN,
     PLATFORMS,
     PROVIDER_HUBBLE,
     PROVIDER_MANUAL_VM85,
@@ -98,7 +101,6 @@ type HubbleConfigEntry = ConfigEntry[HubbleRuntimeData]
 _LEGACY_BRIDGE_KEYS = frozenset(
     {"host", "port", "path", "username", "password", "stream_camera_host"}
 )
-_SUBSCRIPTION_DISCOVERY_MODEL_CODES = frozenset({"3667"})
 _LOCAL_ENTITY_SUFFIXES = frozenset(
     {
         "ceiling_mount",
@@ -204,71 +206,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
                 type(err).__name__,
             )
         else:
-            try:
-                cloud_cameras = await cloud_client.async_get_cameras(cloud_session)
-            except HubbleCloudError as err:
-                _LOGGER.warning(
-                    "Hubble cloud inventory unavailable; local entities remain "
-                    "active: %s",
-                    type(err).__name__,
-                )
-
-            inventory_ids = {camera.registration_id for camera in cloud_cameras}
-            recovered_cameras: list[HubbleCloudCamera] = []
-            try:
-                subscription_camera_ids = (
-                    await cloud_client.async_get_subscription_camera_ids(cloud_session)
-                )
-            except HubbleCloudError as err:
-                _LOGGER.warning(
-                    "Hubble subscription inventory unavailable; normal cloud "
-                    "inventory remains active: %s",
-                    type(err).__name__,
-                )
-                subscription_camera_ids = ()
-            for registration_id in subscription_camera_ids:
-                if (
-                    registration_id in inventory_ids
-                    or registration_id[2:6] not in _SUBSCRIPTION_DISCOVERY_MODEL_CODES
-                ):
-                    continue
-                try:
-                    recovered_cameras.append(
-                        await cloud_client.async_get_camera(
-                            cloud_session, registration_id
-                        )
-                    )
-                except HubbleCloudError as err:
-                    _LOGGER.warning(
-                        "Subscription-discovered Hubble 3667 is unavailable: %s",
-                        type(err).__name__,
-                    )
-            inventory_ids.update(camera.registration_id for camera in recovered_cameras)
-
-            manual_cameras: list[HubbleCloudCamera] = []
-            for index, registration_id in enumerate(
-                configured_cloud_camera_ids, start=1
-            ):
-                if registration_id in inventory_ids:
-                    continue
-                try:
-                    manual_cameras.append(
-                        await cloud_client.async_get_camera(
-                            cloud_session, registration_id
-                        )
-                    )
-                except HubbleCloudError as err:
-                    _LOGGER.warning(
-                        "Manual Hubble cloud camera %d is unavailable: %s",
-                        index,
-                        type(err).__name__,
-                    )
-            additional_cameras = (*recovered_cameras, *manual_cameras)
-            command_camera_candidates = (
-                *(camera for camera in cloud_cameras if camera.model_code == "3667"),
-                *additional_cameras,
+            (
+                cloud_cameras,
+                command_camera_candidates,
+            ) = await cloud_client.async_get_account_cameras(
+                cloud_session, configured_cloud_camera_ids
             )
-            cloud_cameras = (*cloud_cameras, *additional_cameras)
 
             diagnostic_path = Path(hass.config.path("hubble_cloud_structure.json"))
             diagnostic_payload = [
@@ -292,7 +235,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
 
     if manual_orbweb_camera is None:
         local_camera_specs = await async_discover_cloud_cameras(
-            hass, cloud_cameras, configured_camera_specs
+            hass,
+            cloud_cameras,
+            configured_camera_specs,
+            entry.options.get(
+                CONF_CLOUD_CAMERA_HOSTS, entry.data.get(CONF_CLOUD_CAMERA_HOSTS, {})
+            ),
         )
         local_entity_specs = select_local_entity_specs(
             local_camera_specs, command_camera_candidates
@@ -450,6 +398,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
             "Removed %d unsupported or unsafe Hubble entities",
             removed_entities,
         )
+    _migrate_3667_camera_entities(hass, entry, local_camera_specs)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -472,6 +421,89 @@ async def async_unload_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> b
 async def _async_reload_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> None:
     """Reload entities when local camera options change."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _migrate_3667_camera_entities(
+    hass: HomeAssistant,
+    entry: HubbleConfigEntry,
+    specs: tuple[HubbleLocalCameraSpec, ...],
+) -> None:
+    """Move the legacy LAN camera to its cloud device and retain its entity ID."""
+    entities = er.async_get(hass)
+    devices = dr.async_get(hass)
+    devices_by_identifier = {
+        identifier: device
+        for device in dr.async_entries_for_config_entry(devices, entry.entry_id)
+        for identifier in device.identifiers
+    }
+    for spec in specs:
+        if spec.cloud_3667_id is None:
+            continue
+        legacy_id = entities.async_get_entity_id(
+            "camera", DOMAIN, f"{spec.host}:camera"
+        )
+        if legacy_id is None:
+            continue
+        legacy_entity = entities.async_get(legacy_id)
+        if legacy_entity is None or legacy_entity.config_entry_id != entry.entry_id:
+            continue
+
+        identifier = (DOMAIN, f"cloud:{spec.cloud_3667_id}")
+        unique_id = f"{identifier[1]}:camera"
+        duplicate_id = entities.async_get_entity_id("camera", DOMAIN, unique_id)
+        if duplicate_id is not None:
+            duplicate = entities.async_get(duplicate_id)
+            if duplicate is None or duplicate.config_entry_id != entry.entry_id:
+                continue
+            # Prefer the cloud entity if the old LAN entity was disabled.
+            if legacy_entity.disabled and not duplicate.disabled:
+                legacy_id, duplicate_id = duplicate_id, legacy_id
+
+        local_device = devices_by_identifier.get((DOMAIN, f"camera:{spec.host}"))
+        cloud_device = devices_by_identifier.get(identifier)
+        # Older Home Assistant versions can share a device across integrations.
+        if local_device is not None and not hasattr(local_device, "config_entry_id"):
+            if local_device.config_entries != {entry.entry_id}:
+                continue
+        if local_device is not None:
+            if cloud_device is None:
+                cloud_device = devices.async_update_device(
+                    local_device.id,
+                    new_identifiers=(
+                        local_device.identifiers - {(DOMAIN, f"camera:{spec.host}")}
+                    )
+                    | {identifier},
+                )
+            elif cloud_device.id != local_device.id and (
+                hasattr(cloud_device, "config_entry_id")
+                or cloud_device.config_entries == {entry.entry_id}
+            ):
+                devices.async_update_device(
+                    cloud_device.id,
+                    name_by_user=local_device.name_by_user or cloud_device.name_by_user,
+                    area_id=local_device.area_id or cloud_device.area_id,
+                    labels=local_device.labels | cloud_device.labels,
+                )
+
+        if duplicate_id is not None:
+            entities.async_remove(duplicate_id)
+        if cloud_device is not None:
+            entities.async_update_entity(
+                legacy_id, new_unique_id=unique_id, device_id=cloud_device.id
+            )
+        else:
+            entities.async_update_entity(legacy_id, new_unique_id=unique_id)
+
+        if (
+            local_device is not None
+            and cloud_device is not None
+            and local_device.id != cloud_device.id
+            and local_device.identifiers == {(DOMAIN, f"camera:{spec.host}")}
+            and not er.async_entries_for_device(
+                entities, local_device.id, include_disabled_entities=True
+            )
+        ):
+            devices.async_remove_device(local_device.id)
 
 
 def _remove_suppressed_local_entities(

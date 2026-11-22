@@ -383,6 +383,59 @@ class HubbleCloudClient:
         )
         return parse_subscription_camera_ids(payload)
 
+    async def async_get_account_cameras(
+        self,
+        session: HubbleCloudSession,
+        manual_ids: tuple[str, ...],
+        *,
+        validate: bool = False,
+    ) -> tuple[tuple[HubbleCloudCamera, ...], tuple[HubbleCloudCamera, ...]]:
+        """Return the full inventory and the cameras that need command entities."""
+        try:
+            inventory = await self.async_get_cameras(session)
+        except HubbleCloudError as err:
+            if validate:
+                raise
+            _LOGGER.warning(
+                "Hubble cloud inventory unavailable: %s", type(err).__name__
+            )
+            inventory = ()
+
+        try:
+            subscriptions = await self.async_get_subscription_camera_ids(session)
+        except HubbleCloudError as err:
+            _LOGGER.debug(
+                "Hubble subscription inventory unavailable: %s", type(err).__name__
+            )
+            subscriptions = ()
+
+        cameras = {camera.registration_id: camera for camera in inventory}
+        commands = {
+            key: camera
+            for key, camera in cameras.items()
+            if camera.model_code == "3667"
+        }
+        fallback_ids = dict.fromkeys(
+            (
+                *manual_ids,
+                *(key for key in subscriptions if key[2:6] == "3667"),
+            )
+        )
+        for key in fallback_ids:
+            if key in cameras:
+                continue
+            try:
+                camera = await self.async_get_camera(session, key)
+            except HubbleCloudError as err:
+                if validate and key in manual_ids:
+                    raise
+                _LOGGER.debug(
+                    "Hubble fallback camera unavailable: %s", type(err).__name__
+                )
+            else:
+                cameras[key] = commands[key] = camera
+        return tuple(cameras.values()), tuple(commands.values())
+
     async def async_get_temperature(
         self, cloud_session: HubbleCloudSession, registration_id: str
     ) -> float:

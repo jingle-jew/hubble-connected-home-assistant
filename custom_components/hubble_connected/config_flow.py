@@ -13,6 +13,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .cloud import (
     HubbleCloudAuthError,
+    HubbleCloudCamera,
     HubbleCloudCannotConnect,
     HubbleCloudClient,
     HubbleCloudConfigError,
@@ -20,6 +21,8 @@ from .cloud import (
     parse_cloud_camera_ids,
 )
 from .const import (
+    CONF_CAMERA_HOST,
+    CONF_CLOUD_CAMERA_HOSTS,
     CONF_CLOUD_CAMERA_IDS,
     CONF_CLOUD_LOGIN,
     CONF_CLOUD_PASSWORD,
@@ -39,7 +42,11 @@ from .const import (
     PROVIDER_MANUAL_VM85,
     VM85_ORBWEB_ACCOUNT,
 )
-from .local import HubbleLocalConfigError, parse_local_camera_specs
+from .local import (
+    HubbleLocalConfigError,
+    parse_local_camera_host,
+    parse_local_camera_specs,
+)
 from .manual_orbweb import ManualOrbwebConfigError, build_manual_orbweb_camera
 
 
@@ -72,7 +79,70 @@ def _user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     )
 
 
-class HubbleConnectedConfigFlow(ConfigFlow, domain=DOMAIN):
+class _HubbleCameraLanFlow:
+    """Collect an optional LAN address for each owned 3667."""
+
+    async def _async_configure_camera_lan(
+        self,
+        title: str,
+        data: dict[str, Any],
+        cameras: tuple[HubbleCloudCamera, ...],
+        saved_hosts: dict[str, str] | None = None,
+    ) -> ConfigFlowResult:
+        self._lan_title = title
+        self._lan_data = data
+        self._lan_hosts = dict(saved_hosts or {})
+        self._lan_cameras = [
+            camera for camera in cameras if camera.model_code == "3667"
+        ]
+        return await self.async_step_camera_lan()
+
+    async def async_step_camera_lan(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Attach video to the selected cloud camera during setup or options."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            camera = self._lan_cameras[0]
+            value = user_input.get(CONF_CAMERA_HOST, "").strip()
+            host = ""
+            if value:
+                try:
+                    host = parse_local_camera_host(value)
+                except HubbleLocalConfigError:
+                    errors[CONF_CAMERA_HOST] = "invalid_camera_host"
+                else:
+                    if any(
+                        host == other_host and key != camera.registration_id
+                        for key, other_host in self._lan_hosts.items()
+                    ):
+                        errors[CONF_CAMERA_HOST] = "duplicate_camera_host"
+            if not errors:
+                if host:
+                    self._lan_hosts[camera.registration_id] = host
+                else:
+                    self._lan_hosts.pop(camera.registration_id, None)
+                self._lan_cameras.pop(0)
+
+        if not self._lan_cameras:
+            self._lan_data[CONF_CLOUD_CAMERA_HOSTS] = self._lan_hosts
+            return self.async_create_entry(title=self._lan_title, data=self._lan_data)
+
+        camera = self._lan_cameras[0]
+        default = self._lan_hosts.get(camera.registration_id, "")
+        return self.async_show_form(
+            step_id="camera_lan",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_CAMERA_HOST, default=default): str,
+                }
+            ),
+            description_placeholders={"camera_name": camera.name},
+            errors=errors,
+        )
+
+
+class HubbleConnectedConfigFlow(_HubbleCameraLanFlow, ConfigFlow, domain=DOMAIN):
     """Handle a Hubble Connected config flow."""
 
     VERSION = 2
@@ -91,9 +161,10 @@ class HubbleConnectedConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Create a local-first entry with optional Hubble cloud discovery."""
         errors: dict[str, str] = {}
+        cameras: tuple[HubbleCloudCamera, ...] = ()
         if user_input is not None:
             try:
-                parse_local_camera_specs(user_input[CONF_LOCAL_CAMERAS])
+                parse_local_camera_specs(user_input.get(CONF_LOCAL_CAMERAS, ""))
             except HubbleLocalConfigError:
                 errors["base"] = "invalid_camera_list"
             try:
@@ -115,9 +186,9 @@ class HubbleConnectedConfigFlow(ConfigFlow, domain=DOMAIN):
                     session = await client.async_authenticate(
                         cloud_login, cloud_password
                     )
-                    await client.async_get_cameras(session)
-                    for registration_id in cloud_camera_ids:
-                        await client.async_get_camera(session, registration_id)
+                    cameras, _ = await client.async_get_account_cameras(
+                        session, cloud_camera_ids, validate=True
+                    )
                 except HubbleCloudAuthError:
                     errors["base"] = "cloud_invalid_auth"
                 except HubbleCloudCannotConnect:
@@ -134,9 +205,10 @@ class HubbleConnectedConfigFlow(ConfigFlow, domain=DOMAIN):
                 # any number of separately keyed manual VM85 entries.
                 await self.async_set_unique_id(DOMAIN)
                 self._abort_if_unique_id_configured()
-                title = user_input.pop(CONF_NAME)
-                user_input[CONF_PROVIDER] = PROVIDER_HUBBLE
-                return self.async_create_entry(title=title, data=user_input)
+                data = dict(user_input)
+                title = data.pop(CONF_NAME)
+                data[CONF_PROVIDER] = PROVIDER_HUBBLE
+                return await self._async_configure_camera_lan(title, data, cameras)
 
         return self.async_show_form(
             step_id=PROVIDER_HUBBLE,
@@ -183,7 +255,7 @@ class HubbleConnectedConfigFlow(ConfigFlow, domain=DOMAIN):
         return HubbleConnectedOptionsFlow()
 
 
-class HubbleConnectedOptionsFlow(OptionsFlow):
+class HubbleConnectedOptionsFlow(_HubbleCameraLanFlow, OptionsFlow):
     """Configure account access and optional local camera addresses."""
 
     async def async_step_init(
@@ -194,9 +266,10 @@ class HubbleConnectedOptionsFlow(OptionsFlow):
             return await self.async_step_manual_vm85(user_input)
 
         errors: dict[str, str] = {}
+        cameras: tuple[HubbleCloudCamera, ...] = ()
         if user_input is not None:
             try:
-                parse_local_camera_specs(user_input[CONF_LOCAL_CAMERAS])
+                parse_local_camera_specs(user_input.get(CONF_LOCAL_CAMERAS, ""))
             except HubbleLocalConfigError:
                 errors["base"] = "invalid_camera_list"
             try:
@@ -224,9 +297,9 @@ class HubbleConnectedOptionsFlow(OptionsFlow):
                         session = await client.async_authenticate(
                             cloud_login, cloud_password
                         )
-                        await client.async_get_cameras(session)
-                        for registration_id in cloud_camera_ids:
-                            await client.async_get_camera(session, registration_id)
+                        cameras, _ = await client.async_get_account_cameras(
+                            session, cloud_camera_ids, validate=True
+                        )
                     except HubbleCloudAuthError:
                         errors["base"] = "cloud_invalid_auth"
                     except HubbleCloudCannotConnect:
@@ -239,7 +312,18 @@ class HubbleConnectedOptionsFlow(OptionsFlow):
                 else:
                     user_input.pop(CONF_CLOUD_PASSWORD, None)
             if not errors:
-                return self.async_create_entry(title="", data=user_input)
+                saved_hosts = self.config_entry.options.get(
+                    CONF_CLOUD_CAMERA_HOSTS,
+                    self.config_entry.data.get(CONF_CLOUD_CAMERA_HOSTS, {}),
+                )
+                old_login = self.config_entry.options.get(
+                    CONF_CLOUD_LOGIN, self.config_entry.data.get(CONF_CLOUD_LOGIN, "")
+                )
+                if cloud_login and cloud_login != old_login:
+                    saved_hosts = {}
+                return await self._async_configure_camera_lan(
+                    "", dict(user_input), cameras, saved_hosts
+                )
 
         defaults = user_input or self.config_entry.options
 

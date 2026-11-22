@@ -6,8 +6,29 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .cloud import HubbleCloudCamera
 from .const import DOMAIN, MODEL_NAMES
 from .coordinator import HubbleLocalCoordinator, HubbleOrbwebCommandCoordinator
+
+
+def cloud_camera_device_info(camera: HubbleCloudCamera) -> DeviceInfo:
+    """Identify the same device across cloud telemetry and local video."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"cloud:{camera.registration_id}")},
+        connections=(
+            {(dr.CONNECTION_NETWORK_MAC, camera.mac_address)}
+            if camera.mac_address
+            else set()
+        ),
+        name=camera.name,
+        manufacturer="Hubble Connected / Motorola",
+        model=(
+            f"Hubble camera ({camera.model_code})"
+            if camera.model_code
+            else "Hubble camera"
+        ),
+        sw_version=camera.firmware_version,
+    )
 
 
 class HubbleLocalEntity(CoordinatorEntity[HubbleLocalCoordinator]):
@@ -61,18 +82,4 @@ class HubbleOrbwebCommandEntity(CoordinatorEntity[HubbleOrbwebCommandCoordinator
 
     @property
     def device_info(self) -> DeviceInfo:
-        camera = self.coordinator.cameras[self._registration_id]
-        connections = set()
-        if camera.mac_address:
-            connections.add((dr.CONNECTION_NETWORK_MAC, camera.mac_address))
-        model = "Hubble camera"
-        if camera.model_code:
-            model = f"{model} ({camera.model_code})"
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"cloud:{camera.registration_id}")},
-            connections=connections,
-            name=camera.name,
-            manufacturer="Hubble Connected / Motorola",
-            model=model,
-            sw_version=camera.firmware_version,
-        )
+        return cloud_camera_device_info(self.coordinator.cameras[self._registration_id])

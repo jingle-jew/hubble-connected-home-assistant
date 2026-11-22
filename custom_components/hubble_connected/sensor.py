@@ -8,19 +8,17 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import HubbleConfigEntry
-from .const import DOMAIN
 from .coordinator import (
     HubbleCloudCoordinator,
     HubbleLocalCoordinator,
     HubbleOrbwebCommandCoordinator,
 )
-from .entity import HubbleLocalEntity
+from .entity import HubbleLocalEntity, cloud_camera_device_info
 
 
 async def async_setup_entry(
@@ -133,22 +131,7 @@ class HubbleCommandSensor(CoordinatorEntity[HubbleCommandCoordinator], SensorEnt
 
     @property
     def device_info(self) -> DeviceInfo:
-        camera = self.coordinator.cameras[self._registration_id]
-        connections = set()
-        if camera.mac_address:
-            connections.add((dr.CONNECTION_NETWORK_MAC, camera.mac_address))
-        model_code = camera.model_code
-        model = "Hubble camera"
-        if model_code and model_code.isdigit():
-            model = f"{model} ({model_code})"
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"cloud:{camera.registration_id}")},
-            connections=connections,
-            name=camera.name,
-            manufacturer="Hubble Connected / Motorola",
-            model=model,
-            sw_version=camera.firmware_version,
-        )
+        return cloud_camera_device_info(self.coordinator.cameras[self._registration_id])
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:

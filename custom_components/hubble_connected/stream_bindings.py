@@ -73,6 +73,9 @@ def build_orbweb_command_bindings(
         for spec in local_specs
         if normalize_mac(spec.cloud_mac or "")
     }
+    local_by_registration_id = {
+        spec.cloud_registration_id: spec for spec in local_specs
+    }
     bindings: list[HubbleOrbwebCommandBinding] = []
     for camera in cameras:
         if (
@@ -81,7 +84,9 @@ def build_orbweb_command_bindings(
             or camera.orbweb_password is None
         ):
             continue
-        spec = local_by_mac.get(normalize_mac(camera.mac_address or ""))
+        spec = local_by_registration_id.get(camera.registration_id) or local_by_mac.get(
+            normalize_mac(camera.mac_address or "")
+        )
         key = spec.host if spec is not None else f"cloud:{camera.registration_id}"
         bindings.append(
             HubbleOrbwebCommandBinding(
@@ -107,12 +112,19 @@ def build_orbweb_stream_bindings(
         for camera in cloud_cameras
         if camera.has_orbweb_credentials and normalize_mac(camera.mac_address or "")
     }
+    cloud_by_registration_id = {
+        camera.registration_id: camera for camera in cloud_cameras
+    }
     represented_registration_ids: set[str] = set()
     bindings: list[HubbleOrbwebStreamBinding] = []
 
     for spec in local_specs:
         camera_mac = normalize_mac(spec.cloud_mac or local_macs.get(spec.host) or "")
-        camera = cloud_by_mac.get(camera_mac)
+        camera = (
+            cloud_by_registration_id.get(spec.cloud_registration_id)
+            if spec.cloud_registration_id is not None
+            else cloud_by_mac.get(camera_mac)
+        )
         if camera is None or camera.registration_id in represented_registration_ids:
             continue
         represented_registration_ids.add(camera.registration_id)
@@ -120,12 +132,21 @@ def build_orbweb_stream_bindings(
             continue
         if camera.orbweb_sid is None or camera.orbweb_password is None:
             continue
+        device_identifier = (
+            f"cloud:{camera.registration_id}"
+            if camera.model_code == "3667"
+            else f"camera:{spec.host}"
+        )
         bindings.append(
             HubbleOrbwebStreamBinding(
                 key=spec.host,
                 name=spec.name,
-                unique_id=f"{spec.host}:camera",
-                device_identifier=f"camera:{spec.host}",
+                unique_id=(
+                    f"{device_identifier}:camera"
+                    if camera.model_code == "3667"
+                    else f"{spec.host}:camera"
+                ),
+                device_identifier=device_identifier,
                 route_host=spec.host,
                 target_id=camera.orbweb_sid,
                 auth_password=camera.orbweb_password,

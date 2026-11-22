@@ -181,6 +181,26 @@ class HubbleStreamBindingTests(unittest.TestCase):
 
         self.assertEqual(result, ())
 
+    def test_linked_3667_shares_identity_and_video_and_command_routes(self) -> None:
+        owned = camera(registration_id="XX3667-test-camera", mac_address=None)
+        spec = local.HubbleLocalCameraSpec(
+            name="Local camera",
+            host="192.168.50.12",
+            cloud_registration_id=owned.registration_id,
+        )
+        (video,) = bindings.build_orbweb_stream_bindings((owned,), (spec,), {}, ())
+        (commands,) = bindings.build_orbweb_command_bindings((owned,), (spec,))
+
+        self.assertEqual(video.device_identifier, f"cloud:{owned.registration_id}")
+        self.assertEqual(video.unique_id, f"cloud:{owned.registration_id}:camera")
+        self.assertEqual(video.key, commands.key)
+        self.assertEqual(video.route_host, commands.route_host)
+        self.assertEqual(commands.route_host, spec.host)
+        self.assertEqual(
+            bindings.build_orbweb_stream_bindings((owned,), (spec,), {}, {spec.host}),
+            (),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,7 @@ from .const import (
     DIRECT_RTSP_USERNAME,
     DOMAIN,
 )
+from .entity import cloud_camera_device_info
 from .orbweb import (
     OrbwebLanMappingPool,
     OrbwebProtocolError,
@@ -37,16 +38,27 @@ async def async_setup_entry(
     """Set up the Hubble Connected camera entity."""
     entities: list[HubbleConnectedCamera] = []
     direct_hosts = entry.runtime_data.direct_rtsp_endpoints
+    cloud_devices = {
+        f"cloud:{camera.registration_id}": cloud_camera_device_info(camera)
+        for camera in entry.runtime_data.cloud_cameras
+        if camera.model_code == "3667"
+    }
     for spec in entry.runtime_data.local_camera_specs:
         endpoint = direct_hosts.get(spec.host)
         if endpoint is not None:
+            identifier = f"camera:{spec.host}"
+            unique_id = f"{spec.host}:camera"
+            if spec.cloud_3667_id:
+                identifier = f"cloud:{spec.cloud_3667_id}"
+                unique_id = f"{identifier}:camera"
             entities.append(
                 HubbleConnectedCamera(
                     endpoint,
                     stream_key=spec.host,
                     name=spec.name,
-                    unique_id=f"{spec.host}:camera",
-                    device_identifier=f"camera:{spec.host}",
+                    unique_id=unique_id,
+                    device_identifier=identifier,
+                    device_info=cloud_devices.get(identifier),
                     backend="local_rtsp",
                 )
             )
@@ -62,6 +74,7 @@ async def async_setup_entry(
                         name=binding.name,
                         unique_id=binding.unique_id,
                         device_identifier=binding.device_identifier,
+                        device_info=cloud_devices.get(binding.device_identifier),
                         backend="orbweb_lan",
                         rtsp_port=binding.rtsp_port,
                         rtsp_path=binding.rtsp_path,
@@ -97,6 +110,7 @@ class HubbleConnectedCamera(Camera):
         unique_id: str,
         device_identifier: str,
         backend: str,
+        device_info: DeviceInfo | None = None,
         rtsp_port: int = 6667,
         rtsp_path: str = DIRECT_RTSP_PATH,
         rtsp_username: str = DIRECT_RTSP_USERNAME,
@@ -120,7 +134,7 @@ class HubbleConnectedCamera(Camera):
         self._orbweb_stream_callback_installed = False
         self._stream_key = stream_key
         self._attr_unique_id = unique_id
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = device_info or DeviceInfo(
             identifiers={(DOMAIN, device_identifier)},
             name=name,
             manufacturer="Hubble Connected / Motorola",
