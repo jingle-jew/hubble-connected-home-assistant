@@ -40,6 +40,13 @@ PARTNER_APP_HEADERS = {
     "X-Application-Id": "hubble_club_partner_gcm:1.0.31",
     "X-Auth-Token-Type": "app_token",
 }
+DEFAULT_CLOUD_PROFILE = "hubble"
+PARTNER_CLOUD_PROFILE = "hubble_partner"
+_AUTHENTICATION_PROFILES = (DEFAULT_CLOUD_PROFILE, PARTNER_CLOUD_PROFILE)
+_HEADERS_BY_PROFILE = {
+    DEFAULT_CLOUD_PROFILE: APP_HEADERS,
+    PARTNER_CLOUD_PROFILE: PARTNER_APP_HEADERS,
+}
 
 
 class HubbleCloudError(Exception):
@@ -67,6 +74,7 @@ class HubbleCloudSession:
     """Authenticated cloud session; the token must never enter diagnostics."""
 
     token: str = field(repr=False)
+    profile: str = DEFAULT_CLOUD_PROFILE
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +115,9 @@ class HubbleCloudCamera:
         return value if len(value) == 4 and value.isdigit() else None
 
 
-def parse_authentication(payload: Any) -> HubbleCloudSession:
+def parse_authentication(
+    payload: Any, *, profile: str = DEFAULT_CLOUD_PROFILE
+) -> HubbleCloudSession:
     """Extract an authentication token from a v4 response."""
     data = _response_data(payload)
     if not isinstance(data, Mapping):
@@ -115,7 +125,7 @@ def parse_authentication(payload: Any) -> HubbleCloudSession:
     token = data.get("authentication_token")
     if not isinstance(token, str) or not token:
         raise HubbleCloudProtocolError("Authentication token is missing")
-    return HubbleCloudSession(token=token)
+    return HubbleCloudSession(token=token, profile=profile)
 
 
 def parse_camera_inventory(payload: Any) -> tuple[HubbleCloudCamera, ...]:
@@ -307,27 +317,25 @@ class HubbleCloudClient:
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._job_poll_interval = job_poll_interval
-        self._headers = APP_HEADERS
 
     async def async_authenticate(self, login: str, password: str) -> HubbleCloudSession:
         """Exchange account credentials for a short cloud API token."""
-        self._headers = APP_HEADERS
-        try:
-            payload = await self._async_json_request(
-                "post",
-                AUTH_PATH,
-                json={"login": login, "password": password},
-                authentication=True,
-            )
-        except HubbleCloudAuthError:
-            self._headers = PARTNER_APP_HEADERS
-            payload = await self._async_json_request(
-                "post",
-                AUTH_PATH,
-                json={"login": login, "password": password},
-                authentication=True,
-            )
-        return parse_authentication(payload)
+        last_auth_error: HubbleCloudAuthError | None = None
+        for profile in _AUTHENTICATION_PROFILES:
+            try:
+                payload = await self._async_json_request(
+                    "post",
+                    AUTH_PATH,
+                    json={"login": login, "password": password},
+                    authentication=True,
+                    profile=profile,
+                )
+            except HubbleCloudAuthError as err:
+                last_auth_error = err
+                continue
+            return parse_authentication(payload, profile=profile)
+        assert last_auth_error is not None
+        raise last_auth_error
 
     async def async_get_cameras(
         self, cloud_session: HubbleCloudSession
@@ -341,6 +349,7 @@ class HubbleCloudClient:
                 "api_key": cloud_session.token,
             },
             authentication=True,
+            profile=cloud_session.profile,
         )
         return parse_camera_inventory(payload)
 
@@ -354,6 +363,7 @@ class HubbleCloudClient:
             f"/v6/devices/{quote(registration_id, safe='')}.json",
             params={"api_key": cloud_session.token},
             authentication=True,
+            profile=cloud_session.profile,
         )
         camera = parse_camera(payload)
         if camera.registration_id != registration_id:
@@ -369,6 +379,7 @@ class HubbleCloudClient:
             SUBSCRIPTIONS_PATH,
             params={"api_key": cloud_session.token},
             authentication=True,
+            profile=cloud_session.profile,
         )
         return parse_subscription_camera_ids(payload)
 
@@ -424,6 +435,7 @@ class HubbleCloudClient:
                 "attributes": None,
             },
             authentication=True,
+            profile=cloud_session.profile,
         )
         job_id = _parse_publish_job(payload)
         for _attempt in range(JOB_POLL_ATTEMPTS):
@@ -433,6 +445,7 @@ class HubbleCloudClient:
                 f"/v1/jobs/{quote(job_id, safe='')}",
                 params={"api_key": cloud_session.token},
                 authentication=True,
+                profile=cloud_session.profile,
             )
             value = parser(job_payload)
             if value is not None:
@@ -445,18 +458,26 @@ class HubbleCloudClient:
         path: str,
         *,
         authentication: bool,
+        profile: str = DEFAULT_CLOUD_PROFILE,
         **kwargs: Any,
     ) -> Any:
         try:
             request = getattr(self._session, method)
             async with request(
                 f"{self._base_url}{path}",
-                headers=self._headers,
+                headers=_HEADERS_BY_PROFILE[profile],
                 timeout=REQUEST_TIMEOUT,
                 **kwargs,
             ) as response:
-                payload = await response.json(content_type=None)
                 status = int(response.status)
+                # A rejected login may have an empty or non-JSON body.
+                if status in {401, 403} or (path == AUTH_PATH and status == 424):
+                    raise HubbleCloudAuthError(
+                        "Cloud credentials or token were rejected"
+                    )
+                payload = await response.json(content_type=None)
+        except HubbleCloudAuthError:
+            raise
         except (OSError, TimeoutError) as err:
             raise HubbleCloudCannotConnect(str(err)) from err
         except (TypeError, ValueError) as err:
@@ -466,8 +487,6 @@ class HubbleCloudClient:
                 f"Cloud request failed: {type(err).__name__}"
             ) from err
 
-        if status in {401, 403} or (path == AUTH_PATH and status == 424):
-            raise HubbleCloudAuthError("Cloud credentials or token were rejected")
         if not 200 <= status < 300:
             if authentication and _looks_like_auth_failure(payload):
                 raise HubbleCloudAuthError("Cloud credentials or token were rejected")

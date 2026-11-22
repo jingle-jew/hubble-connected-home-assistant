@@ -32,6 +32,8 @@ class FakeResponse:
         return None
 
     async def json(self, *, content_type=None):
+        if isinstance(self._payload, ValueError):
+            raise self._payload
         return self._payload
 
 
@@ -158,18 +160,25 @@ class HubbleCloudTests(unittest.TestCase):
         async def scenario() -> None:
             session = FakeSession(
                 [
-                    FakeResponse(424, {"status": "424", "message": ""}),
+                    FakeResponse(424, ValueError("non-JSON response")),
                     FakeResponse(
                         201,
                         {"status": "200", "data": {"authentication_token": "t"}},
                     ),
+                    FakeResponse(
+                        201,
+                        {"status": "200", "data": {"authentication_token": "standard"}},
+                    ),
+                    FakeResponse(200, {"status": "200", "data": []}),
                     FakeResponse(200, {"status": "200", "data": []}),
                 ]
             )
             client = cloud.HubbleCloudClient(session)
 
-            auth = await client.async_authenticate("owner@example.com", "pw")
-            await client.async_get_cameras(auth)
+            partner = await client.async_authenticate("owner@example.com", "pw")
+            standard = await client.async_authenticate("other@example.com", "pw")
+            await client.async_get_cameras(partner)
+            await client.async_get_cameras(standard)
 
             self.assertEqual(
                 session.requests[0][2]["headers"]["X-Auth-Tenant"], "hubble"
@@ -179,9 +188,16 @@ class HubbleCloudTests(unittest.TestCase):
                 "hubble_partner",
             )
             self.assertEqual(
-                session.requests[2][2]["headers"]["X-Auth-Tenant"],
-                "hubble_partner",
+                session.requests[2][2]["headers"]["X-Auth-Tenant"], "hubble"
             )
+            self.assertEqual(
+                session.requests[3][2]["headers"]["X-Auth-Tenant"], "hubble_partner"
+            )
+            self.assertEqual(session.requests[3][2]["params"]["api_key"], "t")
+            self.assertEqual(
+                session.requests[4][2]["headers"]["X-Auth-Tenant"], "hubble"
+            )
+            self.assertEqual(session.requests[4][2]["params"]["api_key"], "standard")
 
         asyncio.run(scenario())
 
