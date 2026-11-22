@@ -32,7 +32,7 @@ class FakeResponse:
         return None
 
     async def json(self, *, content_type=None):
-        if isinstance(self._payload, ValueError):
+        if isinstance(self._payload, Exception):
             raise self._payload
         return self._payload
 
@@ -175,7 +175,24 @@ class HubbleCloudTests(unittest.TestCase):
             )
             client = cloud.HubbleCloudClient(session)
 
-            partner = await client.async_authenticate("owner@example.com", "pw")
+            with self.assertLogs(cloud.__name__, level="DEBUG") as logs:
+                partner = await client.async_authenticate("owner@example.com", "pw")
+            self.assertEqual(
+                [record.levelname for record in logs.records],
+                ["DEBUG", "DEBUG", "DEBUG", "INFO"],
+            )
+            self.assertIn(
+                "Attempting Hubble cloud authentication (hubble profile)",
+                logs.output[0],
+            )
+            self.assertIn("authentication rejected (hubble profile)", logs.output[1])
+            self.assertIn(
+                "Attempting Hubble cloud authentication (hubble_partner profile)",
+                logs.output[2],
+            )
+            self.assertIn(
+                "authentication succeeded (hubble_partner profile)", logs.output[3]
+            )
             standard = await client.async_authenticate("other@example.com", "pw")
             await client.async_get_cameras(partner)
             await client.async_get_cameras(standard)
@@ -385,10 +402,168 @@ class HubbleCloudTests(unittest.TestCase):
                 [FakeResponse(200, response), FakeResponse(200, response)]
             )
             client = cloud.HubbleCloudClient(session)
-            with self.assertRaises(cloud.HubbleCloudAuthError):
+            with (
+                self.assertLogs(cloud.__name__, level="WARNING") as logs,
+                self.assertRaises(cloud.HubbleCloudAuthError),
+            ):
                 await client.async_authenticate("owner@example.com", "wrong")
+            self.assertEqual(len(logs.records), 1)
+            self.assertIn(
+                "authentication failed: all profiles were rejected", logs.output[0]
+            )
 
         asyncio.run(scenario())
+
+
+class HubbleCloudLoggingTests(unittest.IsolatedAsyncioTestCase):
+    """Distinguish authentication and discovery outcomes in redacted logs."""
+
+    async def test_authentication_errors_are_distinct_and_redacted(self) -> None:
+        login = "private-owner@example.com"
+        password = "private-account-password"
+        private_url = "https://example.com/?api_key=private-api-token"
+        for response, error, message in (
+            (
+                FakeResponse(200, ValueError(private_url)),
+                cloud.HubbleCloudProtocolError,
+                "authentication received an invalid response",
+            ),
+            (
+                FakeResponse(200, {"data": {"unexpected": password}}),
+                cloud.HubbleCloudProtocolError,
+                "authentication received an invalid response",
+            ),
+            (
+                FakeResponse(200, TimeoutError(private_url)),
+                cloud.HubbleCloudCannotConnect,
+                "could not connect to the cloud service",
+            ),
+        ):
+            with self.subTest(error=error, message=message):
+                session = FakeSession([response])
+                client = cloud.HubbleCloudClient(session)
+                with (
+                    self.assertLogs(cloud.__name__, level="DEBUG") as logs,
+                    self.assertRaises(error),
+                ):
+                    await client.async_authenticate(login, password)
+                self.assertEqual(len(session.requests), 1)
+                self.assertEqual(logs.records[-1].levelname, "WARNING")
+                self.assertIn(message, logs.output[-1])
+                for value in (login, password, private_url, "private-api-token"):
+                    self.assertNotIn(value, "\n".join(logs.output))
+
+    async def test_successful_empty_inventory_is_logged(self) -> None:
+        client = cloud.HubbleCloudClient(
+            FakeSession(
+                [
+                    FakeResponse(200, {"data": []}),
+                    FakeResponse(200, {"data": {"devices": []}}),
+                ]
+            )
+        )
+        with self.assertLogs(cloud.__name__, level="INFO") as logs:
+            result = await client.async_get_account_cameras(
+                cloud.HubbleCloudSession(token="private-api-token"), (), validate=True
+            )
+        self.assertEqual(result, ((), ()))
+        self.assertIn("owned inventory returned 0 camera(s)", logs.output[0])
+        self.assertIn("subscription inventory returned 0 camera(s)", logs.output[1])
+        self.assertIn("completed with an empty inventory (0 cameras)", logs.output[2])
+
+    async def test_owned_inventory_error_is_logged_in_both_modes(self) -> None:
+        for validate in (False, True):
+            for response, error, message in (
+                (
+                    FakeResponse(401, {}),
+                    cloud.HubbleCloudAuthError,
+                    "cloud authentication rejected",
+                ),
+                (
+                    FakeResponse(200, {"data": "private-inventory-data"}),
+                    cloud.HubbleCloudProtocolError,
+                    "invalid cloud response",
+                ),
+            ):
+                with self.subTest(validate=validate, error=error):
+                    client = cloud.HubbleCloudClient(
+                        FakeSession(
+                            [response, FakeResponse(200, {"data": {"devices": []}})]
+                        )
+                    )
+                    session = cloud.HubbleCloudSession(token="private-api-token")
+                    with self.assertLogs(cloud.__name__, level="INFO") as logs:
+                        if validate:
+                            with self.assertRaises(error):
+                                await client.async_get_account_cameras(
+                                    session, (), validate=True
+                                )
+                        else:
+                            result = await client.async_get_account_cameras(session, ())
+                            self.assertEqual(result, ((), ()))
+                    self.assertEqual(logs.records[0].levelname, "WARNING")
+                    self.assertIn(message, logs.output[0])
+                    output = "\n".join(logs.output)
+                    if not validate:
+                        self.assertIn(
+                            "found 0 camera(s) from an incomplete inventory", output
+                        )
+                    self.assertNotIn("empty inventory", output)
+                    self.assertNotIn("private-inventory-data", output)
+
+    async def test_subscription_only_7101_is_reported_and_manual_lookup_still_works(
+        self,
+    ) -> None:
+        registration_id = "AA7101-synthetic-camera"
+        subscription = {"data": {"devices": [{"registration_id": registration_id}]}}
+        camera_record = {
+            "registration_id": registration_id,
+            "name": "Private camera name",
+            "mac_address": "02:00:00:00:00:01",
+            "orbweb": {
+                "sid": "private-orbweb-sid",
+                "password": "private-orbweb-password",
+                "private-response-key": True,
+            },
+        }
+        for manual_ids in ((), (registration_id,)):
+            with self.subTest(manual_lookup=bool(manual_ids)):
+                session = FakeSession(
+                    [
+                        FakeResponse(200, {"data": []}),
+                        FakeResponse(200, subscription),
+                        FakeResponse(200, {"data": camera_record}),
+                    ]
+                )
+                client = cloud.HubbleCloudClient(session)
+                with self.assertLogs(cloud.__name__, level="DEBUG") as logs:
+                    inventory, commands = await client.async_get_account_cameras(
+                        cloud.HubbleCloudSession(token="private-api-token"), manual_ids
+                    )
+                output = "\n".join(logs.output)
+                self.assertIn("subscription inventory returned 1 camera(s)", output)
+                if manual_ids:
+                    self.assertEqual(len(session.requests), 3)
+                    self.assertTrue(inventory[0].has_orbweb_credentials)
+                    self.assertEqual(commands, inventory)
+                    self.assertIn("discovery found 1 camera(s)", output)
+                    self.assertNotIn("outside supported automatic lookup", output)
+                else:
+                    self.assertEqual(len(session.requests), 2)
+                    self.assertEqual((inventory, commands), ((), ()))
+                    self.assertIn("outside supported automatic lookup", output)
+                    self.assertIn("discovery found 0 camera(s)", output)
+                    self.assertNotIn("empty inventory", output)
+                for value in (
+                    registration_id,
+                    "Private camera name",
+                    "02:00:00:00:00:01",
+                    "private-api-token",
+                    "private-orbweb-sid",
+                    "private-orbweb-password",
+                    "private-response-key",
+                ):
+                    self.assertNotIn(value, output)
 
 
 if __name__ == "__main__":
