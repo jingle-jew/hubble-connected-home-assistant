@@ -17,7 +17,7 @@
     "step": {
       "user": {
         "menu_options": {
-          "hubble": "Compte Hubble Connected",
+          "hubble": "Hubble Connected/HubbleClub for Partners",
           "manual_vm85": "Motorola VM85CONNECT (manuel)"
         },
         "menu_option_descriptions": {

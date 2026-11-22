@@ -125,7 +125,7 @@ Assistant, and add the integration from **Settings > Devices & services**.
 
 ## Configuration
 
-Choose **Hubble Connected account** for the existing cloud-assisted setup, or
+Choose **Hubble Connected/HubbleClub for Partners** for cloud-assisted setup, or
 **Motorola VM85CONNECT (manual)** for an owner-provisioned VM85 camera. Existing
 config entries created before this choice was added continue to use the Hubble
 provider.
