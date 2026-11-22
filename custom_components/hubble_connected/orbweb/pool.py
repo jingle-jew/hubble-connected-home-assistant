@@ -132,6 +132,7 @@ class OrbwebLanMappingPool:
         session: Any,
         target_ids: Mapping[str, str],
         *,
+        auth_accounts: Mapping[str, str] | None = None,
         auth_passwords: Mapping[str, str] | None = None,
         source_route_hosts: Mapping[str, str | None] | None = None,
         rendezvous_client: OrbwebRendezvousClient | None = None,
@@ -140,8 +141,11 @@ class OrbwebLanMappingPool:
         identity: OrbwebClientIdentity | None = None,
     ) -> None:
         self._target_ids = dict(target_ids)
+        self._auth_accounts = dict(auth_accounts or {})
         self._auth_passwords = dict(auth_passwords or {})
         self._source_route_hosts = dict(source_route_hosts or {})
+        if not self._auth_accounts.keys() <= self._target_ids.keys():
+            raise ValueError("Orbweb account has no matching camera target")
         if not self._auth_passwords.keys() <= self._target_ids.keys():
             raise ValueError("Orbweb password has no matching camera target")
         if not self._source_route_hosts.keys() <= self._target_ids.keys():
@@ -211,6 +215,8 @@ class OrbwebLanMappingPool:
             }
             if auth_password := self._auth_passwords.get(host):
                 mapping_kwargs["auth_password"] = auth_password
+                if auth_account := self._auth_accounts.get(host):
+                    mapping_kwargs["auth_account"] = auth_account
             mapping = await self._mapping_opener(
                 servers,
                 **mapping_kwargs,

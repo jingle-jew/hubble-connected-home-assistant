@@ -2205,6 +2205,7 @@ class OrbwebLanMappingPoolTests(unittest.IsolatedAsyncioTestCase):
         mapping_pool = pool.OrbwebLanMappingPool(
             object(),
             {"192.0.2.10": "private-target"},
+            auth_accounts={"192.0.2.10": "vm85-account"},
             auth_passwords={"192.0.2.10": "camera-secret"},
             rendezvous_client=rendezvous_client,
             source_address_resolver=lambda _host: asyncio.sleep(0, result="192.0.2.20"),
@@ -2227,6 +2228,7 @@ class OrbwebLanMappingPoolTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNot(third, second)
         self.assertEqual(len(calls), 3)
         self.assertEqual(calls[0]["local_addresses"], ("192.0.2.20",))
+        self.assertEqual(calls[0]["auth_account"], "vm85-account")
         self.assertEqual(calls[0]["auth_password"], "camera-secret")
         self.assertEqual(
             rendezvous_client.targets,
@@ -2234,6 +2236,7 @@ class OrbwebLanMappingPoolTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("private-target", repr(mapping_pool))
         self.assertNotIn("camera-secret", repr(mapping_pool))
+        self.assertNotIn("vm85-account", repr(mapping_pool))
 
         await mapping_pool.async_close()
         self.assertTrue(third.is_closed)

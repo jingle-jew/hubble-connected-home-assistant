@@ -27,11 +27,20 @@ from .const import (
     CONF_CLOUD_LOGIN,
     CONF_CLOUD_PASSWORD,
     CONF_LOCAL_CAMERAS,
+    CONF_ORBWEB_ACCOUNT,
+    CONF_ORBWEB_HOST,
+    CONF_ORBWEB_PASSWORD,
+    CONF_ORBWEB_SID,
+    CONF_PROVIDER,
+    CONF_RTSP_PASSWORD,
+    CONF_RTSP_USERNAME,
     DIRECT_RTSP_PASSWORD,
     DIRECT_RTSP_PATH,
     DIRECT_RTSP_PORT,
     DIRECT_RTSP_USERNAME,
     PLATFORMS,
+    PROVIDER_HUBBLE,
+    PROVIDER_MANUAL_VM85,
 )
 from .coordinator import (
     HubbleCloudCoordinator,
@@ -47,12 +56,14 @@ from .local import (
     HubbleLocalCameraSpec,
     parse_local_camera_specs,
 )
+from .manual_orbweb import ManualOrbwebCamera, build_manual_orbweb_camera
 from .orbweb import OrbwebLanMappingPool
 from .restream import HubbleRestreamError, HubbleRtspRestreamManager
 from .rtsp import HubbleRtspEndpoint, async_probe_rtsp_candidates
 from .stream_bindings import (
     HubbleOrbwebCommandBinding,
     HubbleOrbwebStreamBinding,
+    build_manual_orbweb_stream_binding,
     build_orbweb_command_bindings,
     build_orbweb_stream_bindings,
 )
@@ -79,6 +90,7 @@ class HubbleRuntimeData:
     orbweb_mappings: OrbwebLanMappingPool | None
     rtsp_normalization_keys: frozenset[str]
     rtsp_restream: HubbleRtspRestreamManager | None
+    manual_orbweb_camera: ManualOrbwebCamera | None
 
 
 type HubbleConfigEntry = ConfigEntry[HubbleRuntimeData]
@@ -134,9 +146,31 @@ async def async_migrate_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> 
 
 async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bool:
     """Set up Hubble Connected from a config entry."""
-    configured_camera_specs = parse_local_camera_specs(
-        entry.options.get(CONF_LOCAL_CAMERAS, entry.data.get(CONF_LOCAL_CAMERAS, ""))
+    provider = entry.options.get(
+        CONF_PROVIDER, entry.data.get(CONF_PROVIDER, PROVIDER_HUBBLE)
     )
+    manual_orbweb_camera: ManualOrbwebCamera | None = None
+    if provider == PROVIDER_MANUAL_VM85:
+
+        def value(key: str, default: str = "") -> str:
+            return str(entry.options.get(key, entry.data.get(key, default)))
+
+        manual_orbweb_camera = build_manual_orbweb_camera(
+            name=entry.title,
+            host=value(CONF_ORBWEB_HOST),
+            target_id=value(CONF_ORBWEB_SID),
+            auth_account=value(CONF_ORBWEB_ACCOUNT),
+            auth_password=value(CONF_ORBWEB_PASSWORD),
+            rtsp_username=value(CONF_RTSP_USERNAME),
+            rtsp_password=value(CONF_RTSP_PASSWORD),
+        )
+        configured_camera_specs = ()
+    else:
+        configured_camera_specs = parse_local_camera_specs(
+            entry.options.get(
+                CONF_LOCAL_CAMERAS, entry.data.get(CONF_LOCAL_CAMERAS, "")
+            )
+        )
     configured_cloud_camera_ids = parse_cloud_camera_ids(
         entry.options.get(
             CONF_CLOUD_CAMERA_IDS,
@@ -256,12 +290,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
                 "utf-8",
             )
 
-    local_camera_specs = await async_discover_cloud_cameras(
-        hass, cloud_cameras, configured_camera_specs
-    )
-    local_entity_specs = select_local_entity_specs(
-        local_camera_specs, command_camera_candidates
-    )
+    if manual_orbweb_camera is None:
+        local_camera_specs = await async_discover_cloud_cameras(
+            hass, cloud_cameras, configured_camera_specs
+        )
+        local_entity_specs = select_local_entity_specs(
+            local_camera_specs, command_camera_candidates
+        )
+    else:
+        local_camera_specs = ()
+        local_entity_specs = ()
     coordinator = None
     if local_entity_specs:
         coordinator = HubbleLocalCoordinator(hass, local_entity_specs)
@@ -298,6 +336,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         local_macs,
         direct_rtsp_endpoints,
     )
+    if manual_orbweb_camera is not None:
+        orbweb_streams = (
+            *orbweb_streams,
+            build_manual_orbweb_stream_binding(manual_orbweb_camera),
+        )
     orbweb_command_bindings = build_orbweb_command_bindings(
         command_camera_candidates,
         local_camera_specs,
@@ -305,6 +348,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
     orbweb_target_ids = {binding.key: binding.target_id for binding in orbweb_streams}
     orbweb_auth_passwords = {
         binding.key: binding.auth_password for binding in orbweb_streams
+    }
+    orbweb_auth_accounts = {
+        binding.key: binding.auth_account
+        for binding in orbweb_streams
+        if binding.auth_account is not None
     }
     orbweb_route_hosts = {binding.key: binding.route_host for binding in orbweb_streams}
     for binding in orbweb_command_bindings:
@@ -315,6 +363,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         OrbwebLanMappingPool(
             async_get_clientsession(hass),
             orbweb_target_ids,
+            auth_accounts=orbweb_auth_accounts,
             auth_passwords=orbweb_auth_passwords,
             source_route_hosts=orbweb_route_hosts,
         )
@@ -377,6 +426,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         orbweb_mappings=orbweb_mappings,
         rtsp_normalization_keys=rtsp_normalization_keys,
         rtsp_restream=rtsp_restream,
+        manual_orbweb_camera=manual_orbweb_camera,
     )
     removed_entities = _remove_suppressed_local_entities(
         hass,
@@ -510,13 +560,13 @@ def _create_rtsp_restream(
     hass: HomeAssistant,
     normalization_keys: frozenset[str],
 ) -> HubbleRtspRestreamManager | None:
-    """Use HA-managed go2rtc only when a 3667 needs media normalization."""
+    """Use HA-managed go2rtc when a model needs a shared RTSP source."""
     if not normalization_keys:
         return None
     config = hass.data.get(_DATA_GO2RTC)
     if config is None or config.url != HA_MANAGED_URL:
         _LOGGER.warning(
-            "Hubble 3667 media normalization requires Home Assistant-managed go2rtc"
+            "Hubble RTSP restreaming requires Home Assistant-managed go2rtc"
         )
         return None
 

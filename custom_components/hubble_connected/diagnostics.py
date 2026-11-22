@@ -67,6 +67,17 @@ async def async_get_config_entry_diagnostics(
     backend = "+".join(backends) if backends else "local_only"
     return {
         "backend": backend,
+        "manual_orbweb": (
+            {
+                "configured": True,
+                "model": entry.runtime_data.manual_orbweb_camera.model,
+                "owner_authentication": True,
+                "rtsp_port": entry.runtime_data.manual_orbweb_camera.rtsp_port,
+                "rtsp_path": entry.runtime_data.manual_orbweb_camera.rtsp_path,
+            }
+            if entry.runtime_data.manual_orbweb_camera is not None
+            else {"configured": False}
+        ),
         "direct_rtsp_camera_count": len(direct_endpoints),
         "orbweb_lan_camera_count": (
             len(orbweb_mappings.hosts) if orbweb_mappings is not None else 0
