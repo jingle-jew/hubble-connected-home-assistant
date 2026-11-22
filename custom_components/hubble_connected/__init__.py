@@ -358,7 +358,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
     rtsp_normalization_keys = frozenset(
         binding.key
         for binding in orbweb_streams
-        if model_by_target.get(binding.target_id) == "3667"
+        if model_by_target.get(binding.target_id) in {"1844", "3667"}
     )
     rtsp_restream = _create_rtsp_restream(hass, rtsp_normalization_keys)
     entry.runtime_data = HubbleRuntimeData(
