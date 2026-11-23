@@ -54,7 +54,7 @@ _LOGGER = logging.getLogger(__name__)
 
 VM85_SETUP_GUIDE_URL = (
     "https://github.com/jingle-jew/hubble-connected-home-assistant"
-    "#motorola-vm85connect-manual"
+    "/wiki/Motorola-VM85CONNECT-setup"
 )
 
 
