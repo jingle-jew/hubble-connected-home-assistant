@@ -44,3 +44,21 @@ provided the cloud API supports those readings for the camera.
 To report compatibility for another camera or firmware version, include the
 model, firmware, working entities, and redacted diagnostics.
 [Diagnostics guidance](README.md#privacy-and-network-use) · [Open a GitHub issue](https://github.com/jingle-jew/hubble-connected-home-assistant/issues/new/choose)
+
+## Motorola credential helper coverage
+
+The [Python credential helper](tools/extract_vm85_credentials.py) targets the
+Motorola Nursery Android app's VM85CONNECT diagnostic format. It runs with
+Python 3.10+ and ADB without third-party Python packages. Synthetic extraction
+and ADB workflow tests run on Linux; physical phone/camera validation and
+execution on macOS and Windows remain outstanding. The existing Windows
+PowerShell helper is retained unchanged. These helper checks do not add new
+hardware to the tested camera table above.
+
+VM65X Connect is **not verified** for this helper or the VM85 manual profile.
+[Issue #3](https://github.com/jingle-jew/hubble-connected-home-assistant/issues/3)
+reports email-OTP login in another app (`com.hubble.care`), not a successful
+Motorola Nursery credential capture. Hardware, firmware, app, and log-format
+compatibility must be established separately from cloud login support.
+
+[Installation, privacy, and troubleshooting](README.md#install-python-and-adb)
