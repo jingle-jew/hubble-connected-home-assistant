@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 
@@ -10,6 +11,8 @@ from .const import DIRECT_RTSP_PASSWORD, DIRECT_RTSP_PATH, DIRECT_RTSP_USERNAME
 from .discovery import normalize_mac
 from .local import HubbleLocalCameraSpec
 from .manual_orbweb import ManualOrbwebCamera
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,11 +118,18 @@ def build_orbweb_stream_bindings(
     cloud_by_registration_id = {
         camera.registration_id: camera for camera in cloud_cameras
     }
+    direct_registration_ids: set[str] = set()
+    direct_macs: set[str] = set()
     represented_registration_ids: set[str] = set()
     bindings: list[HubbleOrbwebStreamBinding] = []
 
     for spec in local_specs:
         camera_mac = normalize_mac(spec.cloud_mac or local_macs.get(spec.host) or "")
+        if spec.host in direct_hosts:
+            if spec.cloud_registration_id is not None:
+                direct_registration_ids.add(spec.cloud_registration_id)
+            elif camera_mac:
+                direct_macs.add(camera_mac)
         camera = (
             cloud_by_registration_id.get(spec.cloud_registration_id)
             if spec.cloud_registration_id is not None
@@ -174,4 +184,16 @@ def build_orbweb_stream_bindings(
             )
         )
 
+    without_video = sum(
+        not camera.has_orbweb_credentials
+        and camera.registration_id not in direct_registration_ids
+        and normalize_mac(camera.mac_address or "") not in direct_macs
+        for camera in cloud_cameras
+    )
+    if without_video:
+        _LOGGER.warning(
+            "Hubble cloud discovery found %d camera(s) with no supported video route "
+            "(no direct RTSP and missing Orbweb credentials)",
+            without_video,
+        )
     return tuple(bindings)

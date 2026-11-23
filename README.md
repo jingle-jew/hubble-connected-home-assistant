@@ -30,6 +30,10 @@ Use Home Assistant 2026.8 or later, with the camera on the same local network.
    For a compatible local-only camera, choose the same option and leave the sign-in fields blank.
 3. Follow the prompts, then open the camera from its Home Assistant device page.
 
+For a HubbleClub 7101, sign in and leave the optional registration ID blank.
+Home Assistant can find the camera through your account's subscriptions.
+[7101 video and feature support](COMPATIBLE_DEVICES.md#hubbleclub-7101)
+
 ### Motorola VM85CONNECT (manual)
 
 Choose **Motorola VM85CONNECT (manual)** for this model.

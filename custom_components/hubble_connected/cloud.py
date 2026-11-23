@@ -23,6 +23,8 @@ REQUEST_TIMEOUT = 10
 JOB_POLL_INTERVAL = 2.0
 JOB_POLL_ATTEMPTS = 10
 
+# Limit detail requests to models observed missing from the owned inventory.
+_SUBSCRIPTION_LOOKUP_MODELS = frozenset({"3667", "7101"})
 _LOGGER = logging.getLogger(__name__)
 
 CommandValue = TypeVar("CommandValue")
@@ -264,21 +266,6 @@ def _parse_camera_record(item: Mapping[str, Any]) -> HubbleCloudCamera:
     detail = _mapping(device_status.get("device"))
     settings = _parse_settings(item.get("device_settings"))
 
-    _LOGGER.info(
-        "Hubble cloud camera structure: device_model_id=%s "
-        "root_keys=%s orbweb_keys=%s device_status_keys=%s device_keys=%s "
-        "has_mac=%s has_orbweb=%s",
-        _optional_int(item.get("device_model_id")),
-        sorted(str(key) for key in item),
-        sorted(str(key) for key in orbweb),
-        sorted(str(key) for key in device_status),
-        sorted(str(key) for key in detail),
-        bool(_optional_str(item.get("mac_address"))),
-        bool(
-            _optional_str(orbweb.get("sid")) and _optional_str(orbweb.get("password"))
-        ),
-    )
-
     return HubbleCloudCamera(
         cloud_id=_optional_int(item.get("id")),
         name=_optional_str(item.get("name")) or "Hubble camera",
@@ -322,6 +309,9 @@ class HubbleCloudClient:
         """Exchange account credentials for a short cloud API token."""
         last_auth_error: HubbleCloudAuthError | None = None
         for profile in _AUTHENTICATION_PROFILES:
+            _LOGGER.debug(
+                "Attempting Hubble cloud authentication (%s profile)", profile
+            )
             try:
                 payload = await self._async_json_request(
                     "post",
@@ -330,11 +320,33 @@ class HubbleCloudClient:
                     authentication=True,
                     profile=profile,
                 )
+                session = parse_authentication(payload, profile=profile)
             except HubbleCloudAuthError as err:
                 last_auth_error = err
+                _LOGGER.debug(
+                    "Hubble cloud authentication rejected (%s profile)", profile
+                )
                 continue
-            return parse_authentication(payload, profile=profile)
+            except HubbleCloudCannotConnect:
+                _LOGGER.warning(
+                    "Hubble cloud authentication failed (%s profile): "
+                    "could not connect to the cloud service",
+                    profile,
+                )
+                raise
+            except HubbleCloudProtocolError:
+                _LOGGER.warning(
+                    "Hubble cloud authentication received an invalid response "
+                    "(%s profile)",
+                    profile,
+                )
+                raise
+            _LOGGER.info("Hubble cloud authentication succeeded (%s profile)", profile)
+            return session
         assert last_auth_error is not None
+        _LOGGER.warning(
+            "Hubble cloud authentication failed: all profiles were rejected"
+        )
         raise last_auth_error
 
     async def async_get_cameras(
@@ -391,23 +403,37 @@ class HubbleCloudClient:
         validate: bool = False,
     ) -> tuple[tuple[HubbleCloudCamera, ...], tuple[HubbleCloudCamera, ...]]:
         """Return the full inventory and the cameras that need command entities."""
+        incomplete = False
         try:
             inventory = await self.async_get_cameras(session)
         except HubbleCloudError as err:
+            _LOGGER.warning(
+                "Hubble cloud owned camera inventory unavailable: %s",
+                _cloud_inventory_error_reason(err),
+            )
             if validate:
                 raise
-            _LOGGER.warning(
-                "Hubble cloud inventory unavailable: %s", type(err).__name__
-            )
             inventory = ()
+            incomplete = True
+        else:
+            _LOGGER.info(
+                "Hubble cloud owned inventory returned %d camera(s)", len(inventory)
+            )
 
         try:
             subscriptions = await self.async_get_subscription_camera_ids(session)
         except HubbleCloudError as err:
             _LOGGER.debug(
-                "Hubble subscription inventory unavailable: %s", type(err).__name__
+                "Hubble cloud subscription inventory unavailable: %s",
+                _cloud_inventory_error_reason(err),
             )
             subscriptions = ()
+            incomplete = True
+        else:
+            _LOGGER.info(
+                "Hubble cloud subscription inventory returned %d camera(s)",
+                len(subscriptions),
+            )
 
         cameras = {camera.registration_id: camera for camera in inventory}
         commands = {
@@ -415,25 +441,56 @@ class HubbleCloudClient:
             for key, camera in cameras.items()
             if camera.model_code == "3667"
         }
-        fallback_ids = dict.fromkeys(
-            (
-                *manual_ids,
-                *(key for key in subscriptions if key[2:6] == "3667"),
-            )
+        subscription_ids = dict.fromkeys(
+            key for key in subscriptions if key[2:6] in _SUBSCRIPTION_LOOKUP_MODELS
         )
+        fallback_ids = dict.fromkeys((*manual_ids, *subscription_ids))
+        skipped = sum(
+            key not in cameras and key not in fallback_ids for key in subscriptions
+        )
+        if skipped:
+            _LOGGER.info(
+                "Hubble cloud subscriptions listed %d additional camera(s) "
+                "outside supported automatic lookup",
+                skipped,
+            )
+        recovered_from_subscriptions = 0
         for key in fallback_ids:
             if key in cameras:
                 continue
             try:
                 camera = await self.async_get_camera(session, key)
             except HubbleCloudError as err:
+                _LOGGER.debug(
+                    "Hubble cloud individual camera lookup failed: %s",
+                    _cloud_inventory_error_reason(err),
+                )
                 if validate and key in manual_ids:
                     raise
-                _LOGGER.debug(
-                    "Hubble fallback camera unavailable: %s", type(err).__name__
-                )
+                incomplete = True
             else:
-                cameras[key] = commands[key] = camera
+                cameras[key] = camera
+                if key in manual_ids or camera.model_code == "3667":
+                    commands[key] = camera
+                if key in subscription_ids:
+                    recovered_from_subscriptions += 1
+        if recovered_from_subscriptions:
+            _LOGGER.info(
+                "Hubble cloud individual lookup recovered %d subscription camera(s)",
+                recovered_from_subscriptions,
+            )
+        if incomplete:
+            _LOGGER.info(
+                "Hubble cloud discovery found %d camera(s) "
+                "from an incomplete inventory",
+                len(cameras),
+            )
+        elif not cameras and not skipped:
+            _LOGGER.info(
+                "Hubble cloud discovery completed with an empty inventory (0 cameras)"
+            )
+        else:
+            _LOGGER.info("Hubble cloud discovery found %d camera(s)", len(cameras))
         return tuple(cameras.values()), tuple(commands.values())
 
     async def async_get_temperature(
@@ -547,6 +604,17 @@ class HubbleCloudClient:
         if authentication and _looks_like_auth_failure(payload):
             raise HubbleCloudAuthError("Cloud credentials or token were rejected")
         return payload
+
+
+def _cloud_inventory_error_reason(error: HubbleCloudError) -> str:
+    """Describe a lookup failure without logging a response or request URL."""
+    if isinstance(error, HubbleCloudAuthError):
+        return "cloud authentication rejected"
+    if isinstance(error, HubbleCloudProtocolError):
+        return "invalid cloud response"
+    if isinstance(error, HubbleCloudCannotConnect):
+        return "cloud connection failed"
+    return "invalid camera identifier"
 
 
 def _response_data(payload: Any) -> Any:

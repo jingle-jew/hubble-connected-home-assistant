@@ -194,16 +194,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
         CONF_CLOUD_PASSWORD, entry.data.get(CONF_CLOUD_PASSWORD, "")
     )
     if cloud_login and cloud_password:
+        _LOGGER.debug("Checking Hubble cloud account during integration startup")
         cloud_client = HubbleCloudClient(async_get_clientsession(hass))
         try:
             cloud_session = await cloud_client.async_authenticate(
                 cloud_login, cloud_password
             )
-        except HubbleCloudError as err:
-            _LOGGER.warning(
-                "Hubble cloud authentication unavailable; local entities remain "
-                "active: %s",
-                type(err).__name__,
+        except HubbleCloudError:
+            _LOGGER.debug(
+                "Continuing Hubble integration startup in local mode "
+                "after cloud authentication failed"
             )
         else:
             (
@@ -232,6 +232,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubbleConfigEntry) -> bo
                 json.dumps(diagnostic_payload, indent=2, sort_keys=True),
                 "utf-8",
             )
+    elif manual_orbweb_camera is None:
+        _LOGGER.debug(
+            "Skipping Hubble cloud authentication during integration startup "
+            "because account credentials are not configured"
+        )
 
     if manual_orbweb_camera is None:
         local_camera_specs = await async_discover_cloud_cameras(

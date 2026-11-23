@@ -126,9 +126,10 @@ class HubbleStreamBindingTests(unittest.TestCase):
                     rtsp_password="rtsp-secret",
                 )
 
-    def test_cloud_camera_without_mac_still_gets_orbweb_binding(self) -> None:
+    def test_cloud_7101_with_credentials_needs_no_mac_for_orbweb_binding(self) -> None:
+        owned = camera(registration_id="AA7101-synthetic-camera", mac_address=None)
         result = bindings.build_orbweb_stream_bindings(
-            (camera(mac_address=None),),
+            (owned,),
             (),
             {},
             (),
@@ -136,11 +137,11 @@ class HubbleStreamBindingTests(unittest.TestCase):
 
         self.assertEqual(len(result), 1)
         binding = result[0]
-        self.assertEqual(binding.key, "cloud:registration-1")
+        self.assertEqual(binding.key, f"cloud:{owned.registration_id}")
         self.assertEqual(binding.name, "Basement")
         self.assertIsNone(binding.route_host)
-        self.assertEqual(binding.unique_id, "cloud:registration-1:camera")
-        self.assertEqual(binding.device_identifier, "cloud:registration-1")
+        self.assertEqual(binding.unique_id, f"cloud:{owned.registration_id}:camera")
+        self.assertEqual(binding.device_identifier, f"cloud:{owned.registration_id}")
         self.assertNotIn("orbweb-target", repr(binding))
         self.assertNotIn("orbweb-secret", repr(binding))
 
@@ -180,6 +181,55 @@ class HubbleStreamBindingTests(unittest.TestCase):
         )
 
         self.assertEqual(result, ())
+
+    def test_discovered_camera_without_video_route_is_logged_without_identifiers(
+        self,
+    ) -> None:
+        owned = camera(
+            registration_id="AA7101-synthetic-camera",
+            name="Private camera name",
+            mac_address="02:00:00:00:00:01",
+            orbweb_sid="private-orbweb-sid",
+            orbweb_password=None,
+        )
+        with self.assertLogs(bindings.__name__, level="WARNING") as logs:
+            result = bindings.build_orbweb_stream_bindings((owned,), (), {}, ())
+
+        self.assertEqual(result, ())
+        self.assertIn("found 1 camera(s) with no supported video route", logs.output[0])
+        self.assertIn("missing Orbweb credentials", logs.output[0])
+        for value in (
+            owned.registration_id,
+            owned.name,
+            owned.mac_address,
+            owned.orbweb_sid,
+        ):
+            self.assertNotIn(value, logs.output[0])
+
+    def test_direct_rtsp_without_orbweb_credentials_does_not_log_missing_video(
+        self,
+    ) -> None:
+        owned = camera(
+            mac_address="02:00:00:00:00:01",
+            orbweb_sid=None,
+            orbweb_password=None,
+        )
+        for registration_id in (owned.registration_id, None):
+            spec = local.HubbleLocalCameraSpec(
+                name="Local camera",
+                host="192.0.2.12",
+                cloud_registration_id=registration_id,
+            )
+            with (
+                self.subTest(match_by_registration_id=registration_id is not None),
+                self.assertNoLogs(bindings.__name__, level="WARNING"),
+            ):
+                self.assertEqual(
+                    bindings.build_orbweb_stream_bindings(
+                        (owned,), (spec,), {spec.host: owned.mac_address}, {spec.host}
+                    ),
+                    (),
+                )
 
     def test_linked_3667_shares_identity_and_video_and_command_routes(self) -> None:
         owned = camera(registration_id="XX3667-test-camera", mac_address=None)
