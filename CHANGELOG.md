@@ -2,6 +2,14 @@
 
 All notable changes will be documented here.
 
+## Unreleased
+
+- Automatically discover model 7101 cameras listed only in Hubble
+  subscriptions. Live video depends on an available local video route.
+- Log cloud sign-in outcomes, empty or incomplete camera inventories, and
+  discovered cameras without a supported video route. The logs omit account
+  credentials, tokens, and camera identifiers.
+
 ## 0.1.1-beta.2 - 2026-11-22
 
 - Add an optional local IP address for each model 3667 camera during setup
