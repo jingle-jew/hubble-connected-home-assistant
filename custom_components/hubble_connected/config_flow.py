@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -49,9 +50,11 @@ from .local import (
 )
 from .manual_orbweb import ManualOrbwebConfigError, build_manual_orbweb_camera
 
+_LOGGER = logging.getLogger(__name__)
+
 VM85_SETUP_GUIDE_URL = (
     "https://github.com/jingle-jew/hubble-connected-home-assistant"
-    "#motorola-vm85connect-manual"
+    "/wiki/Motorola-VM85CONNECT-setup"
 )
 
 
@@ -188,6 +191,7 @@ class HubbleConnectedConfigFlow(_HubbleCameraLanFlow, ConfigFlow, domain=DOMAIN)
             if cloud_login and not cloud_password:
                 errors["base"] = "cloud_invalid_auth"
             elif cloud_login and not errors:
+                _LOGGER.debug("Checking Hubble cloud account during initial setup")
                 client = HubbleCloudClient(async_get_clientsession(self.hass))
                 try:
                     session = await client.async_authenticate(
@@ -300,6 +304,9 @@ class HubbleConnectedOptionsFlow(_HubbleCameraLanFlow, OptionsFlow):
                 elif cloud_camera_ids and not cloud_login:
                     errors["base"] = "cloud_credentials_required"
                 elif cloud_login:
+                    _LOGGER.debug(
+                        "Checking Hubble cloud account in integration options"
+                    )
                     client = HubbleCloudClient(async_get_clientsession(self.hass))
                     try:
                         session = await client.async_authenticate(
