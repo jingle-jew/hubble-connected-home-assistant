@@ -3,6 +3,9 @@
 Contributions are welcome when they preserve the project's clean-room and
 owner-authorization boundaries.
 
+Start with the [development guide](https://github.com/jingle-jew/hubble-connected-home-assistant/wiki/Development-and-contributing)
+for environment setup, repository layout and the pull request workflow.
+
 ## Clean-room requirements
 
 Do not submit:
@@ -32,6 +35,7 @@ Run before opening a pull request:
 
 ```sh
 ruff check custom_components tests tools
+ruff format --check custom_components tests tools
 python -m unittest discover -s tests -v
 ```
 
