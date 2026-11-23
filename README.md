@@ -155,7 +155,8 @@ Some cameras appear in the account's subscription inventory while missing from
 its `devices/own` list. The integration automatically looks up those cameras
 for models 3667 and 7101. A discovered 7101 can get a camera entity when its
 record provides Orbweb credentials or a matching local RTSP route is available.
-Live video on the 7101 still needs verification on hardware.
+GodofGTASA confirmed live video over Orbweb LAN on a 7101 running firmware
+`03.60.32`. [7101 hardware report](https://github.com/jingle-jew/hubble-connected-home-assistant/issues/4#issuecomment-7111737685)
 
 For the verified 3667, the integration retrieves Orbweb credentials and polls
 temperature, Wi-Fi strength, and video bitrate from the camera's HTTP command
