@@ -1,3 +1,5 @@
+![Hubble Connected for Home Assistant — unofficial community integration](docs/images/banner.png)
+
 # Hubble Connected for Home Assistant
 
 View your Hubble, Luvion or Motorola baby camera in Home Assistant. On supported
