@@ -511,9 +511,7 @@ class HubbleCloudLoggingTests(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn("empty inventory", output)
                     self.assertNotIn("private-inventory-data", output)
 
-    async def test_subscription_only_7101_is_reported_and_manual_lookup_still_works(
-        self,
-    ) -> None:
+    async def test_subscription_only_7101_is_recovered_without_manual_id(self) -> None:
         registration_id = "AA7101-synthetic-camera"
         subscription = {"data": {"devices": [{"registration_id": registration_id}]}}
         camera_record = {
@@ -530,6 +528,9 @@ class HubbleCloudLoggingTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(manual_lookup=bool(manual_ids)):
                 session = FakeSession(
                     [
+                        FakeResponse(
+                            200, {"data": {"authentication_token": "private-api-token"}}
+                        ),
                         FakeResponse(200, {"data": []}),
                         FakeResponse(200, subscription),
                         FakeResponse(200, {"data": camera_record}),
@@ -537,33 +538,144 @@ class HubbleCloudLoggingTests(unittest.IsolatedAsyncioTestCase):
                 )
                 client = cloud.HubbleCloudClient(session)
                 with self.assertLogs(cloud.__name__, level="DEBUG") as logs:
+                    auth = await client.async_authenticate(
+                        "owner@example.com", "private-account-password"
+                    )
                     inventory, commands = await client.async_get_account_cameras(
-                        cloud.HubbleCloudSession(token="private-api-token"), manual_ids
+                        auth, manual_ids
                     )
                 output = "\n".join(logs.output)
+                self.assertIn("authentication succeeded (hubble profile)", output)
                 self.assertIn("subscription inventory returned 1 camera(s)", output)
-                if manual_ids:
-                    self.assertEqual(len(session.requests), 3)
-                    self.assertTrue(inventory[0].has_orbweb_credentials)
-                    self.assertEqual(commands, inventory)
-                    self.assertIn("discovery found 1 camera(s)", output)
-                    self.assertNotIn("outside supported automatic lookup", output)
-                else:
-                    self.assertEqual(len(session.requests), 2)
-                    self.assertEqual((inventory, commands), ((), ()))
-                    self.assertIn("outside supported automatic lookup", output)
-                    self.assertIn("discovery found 0 camera(s)", output)
-                    self.assertNotIn("empty inventory", output)
+                self.assertEqual(len(session.requests), 4)
+                self.assertTrue(
+                    session.requests[3][1].endswith(f"/{registration_id}.json")
+                )
+                (discovered,) = inventory
+                self.assertTrue(discovered.has_orbweb_credentials)
+                self.assertEqual(commands, inventory if manual_ids else ())
+                self.assertIn(
+                    "individual lookup recovered 1 subscription camera(s)", output
+                )
+                self.assertIn("discovery found 1 camera(s)", output)
                 for value in (
                     registration_id,
                     "Private camera name",
                     "02:00:00:00:00:01",
                     "private-api-token",
+                    "owner@example.com",
+                    "private-account-password",
                     "private-orbweb-sid",
                     "private-orbweb-password",
                     "private-response-key",
                 ):
                     self.assertNotIn(value, output)
+
+    async def test_subscription_lookups_preserve_owned_and_3667_cameras(self) -> None:
+        owned = "AA7101-synthetic-owned"
+        existing = "AA3667-synthetic-camera"
+        new = "AA7101-synthetic-camera"
+        unrelated = "AA9999-synthetic-device"
+        session = FakeSession(
+            [
+                FakeResponse(200, {"data": [{"registration_id": owned}]}),
+                FakeResponse(
+                    200,
+                    {
+                        "data": {
+                            "devices": [
+                                {"registration_id": key}
+                                for key in (owned, existing, existing, new, unrelated)
+                            ]
+                        }
+                    },
+                ),
+                FakeResponse(200, {"data": {"registration_id": existing}}),
+                FakeResponse(
+                    200,
+                    {
+                        "data": {
+                            "registration_id": new,
+                            "orbweb": {"sid": "private-sid"},
+                        }
+                    },
+                ),
+            ]
+        )
+        with self.assertLogs(cloud.__name__, level="INFO") as logs:
+            inventory, commands = await cloud.HubbleCloudClient(
+                session
+            ).async_get_account_cameras(
+                cloud.HubbleCloudSession(token="test-token"), ()
+            )
+        self.assertEqual(
+            [camera.registration_id for camera in inventory], [owned, existing, new]
+        )
+        self.assertEqual([camera.registration_id for camera in commands], [existing])
+        self.assertEqual(len(session.requests), 4)
+        self.assertFalse(inventory[-1].has_orbweb_credentials)
+        self.assertIn("recovered 2 subscription camera(s)", "\n".join(logs.output))
+        self.assertIn("outside supported automatic lookup", "\n".join(logs.output))
+
+    async def test_failed_7101_lookup_keeps_other_cameras_and_manual_validation(
+        self,
+    ) -> None:
+        registration_id = "AA7101-synthetic-camera"
+        existing = "AA3667-synthetic-camera"
+        for case, response, error, reason in (
+            (
+                "detail request failed",
+                FakeResponse(404, {}),
+                cloud.HubbleCloudCannotConnect,
+                "cloud connection failed",
+            ),
+            (
+                "missing registration ID",
+                FakeResponse(200, {"data": {}}),
+                cloud.HubbleCloudProtocolError,
+                "invalid cloud response",
+            ),
+            (
+                "different registration ID",
+                FakeResponse(200, {"data": {"registration_id": "AA7101-other-camera"}}),
+                cloud.HubbleCloudProtocolError,
+                "invalid cloud response",
+            ),
+        ):
+            with self.subTest(case=case):
+                session = FakeSession(
+                    [
+                        FakeResponse(200, {"data": [{"registration_id": existing}]}),
+                        FakeResponse(
+                            200,
+                            {
+                                "data": {
+                                    "devices": [{"registration_id": registration_id}]
+                                }
+                            },
+                        ),
+                        response,
+                    ]
+                    * 2
+                )
+                client = cloud.HubbleCloudClient(session)
+                auth = cloud.HubbleCloudSession(token="test-token")
+                with self.assertLogs(cloud.__name__, level="DEBUG") as logs:
+                    inventory, commands = await client.async_get_account_cameras(
+                        auth, (), validate=True
+                    )
+                    with self.assertRaises(error):
+                        await client.async_get_account_cameras(
+                            auth, (registration_id,), validate=True
+                        )
+                self.assertEqual(
+                    [camera.registration_id for camera in inventory], [existing]
+                )
+                self.assertEqual(commands, inventory)
+                output = "\n".join(logs.output)
+                self.assertIn(f"individual camera lookup failed: {reason}", output)
+                self.assertIn("found 1 camera(s) from an incomplete inventory", output)
+                self.assertNotIn(registration_id, output)
 
 
 if __name__ == "__main__":

@@ -151,12 +151,15 @@ the cloud inventory. Its format is:
 Nursery=<camera-ip>, Office=<camera-ip>
 ```
 
-Some owned cameras, including the verified 3667 firmware, can remain absent
-from the account's `devices/own` list while still appearing in the account's
-subscription inventory. The integration automatically recovers those 3667
-identifiers, validates their individual v6 profiles, retrieves their Orbweb
-credentials, and polls temperature, Wi-Fi strength, and video bitrate from the
-camera's HTTP command service through the encrypted same-LAN Orbweb mapping.
+Some cameras appear in the account's subscription inventory while missing from
+its `devices/own` list. The integration automatically looks up those cameras
+for models 3667 and 7101. A discovered 7101 can get a camera entity when its
+record provides Orbweb credentials or a matching local RTSP route is available.
+Live video on the 7101 still needs verification on hardware.
+
+For the verified 3667, the integration retrieves Orbweb credentials and polls
+temperature, Wi-Fi strength, and video bitrate from the camera's HTTP command
+service through the encrypted same-LAN Orbweb mapping.
 The cloud API is not used to publish those getter commands. **Cloud camera
 identifiers omitted from inventory** remains available in the integration
 options as a manual fallback. Identifiers are excluded from diagnostics.

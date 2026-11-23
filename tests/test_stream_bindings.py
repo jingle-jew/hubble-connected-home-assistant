@@ -126,9 +126,10 @@ class HubbleStreamBindingTests(unittest.TestCase):
                     rtsp_password="rtsp-secret",
                 )
 
-    def test_cloud_camera_without_mac_still_gets_orbweb_binding(self) -> None:
+    def test_cloud_7101_with_credentials_needs_no_mac_for_orbweb_binding(self) -> None:
+        owned = camera(registration_id="AA7101-synthetic-camera", mac_address=None)
         result = bindings.build_orbweb_stream_bindings(
-            (camera(mac_address=None),),
+            (owned,),
             (),
             {},
             (),
@@ -136,11 +137,11 @@ class HubbleStreamBindingTests(unittest.TestCase):
 
         self.assertEqual(len(result), 1)
         binding = result[0]
-        self.assertEqual(binding.key, "cloud:registration-1")
+        self.assertEqual(binding.key, f"cloud:{owned.registration_id}")
         self.assertEqual(binding.name, "Basement")
         self.assertIsNone(binding.route_host)
-        self.assertEqual(binding.unique_id, "cloud:registration-1:camera")
-        self.assertEqual(binding.device_identifier, "cloud:registration-1")
+        self.assertEqual(binding.unique_id, f"cloud:{owned.registration_id}:camera")
+        self.assertEqual(binding.device_identifier, f"cloud:{owned.registration_id}")
         self.assertNotIn("orbweb-target", repr(binding))
         self.assertNotIn("orbweb-secret", repr(binding))
 

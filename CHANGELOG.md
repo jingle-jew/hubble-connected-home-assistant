@@ -4,6 +4,8 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+- Automatically discover model 7101 cameras listed only in Hubble
+  subscriptions. Live video depends on an available local video route.
 - Log cloud sign-in outcomes, empty or incomplete camera inventories, and
   discovered cameras without a supported video route. The logs omit account
   credentials, tokens, and camera identifiers.

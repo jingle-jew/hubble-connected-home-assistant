@@ -23,6 +23,8 @@ REQUEST_TIMEOUT = 10
 JOB_POLL_INTERVAL = 2.0
 JOB_POLL_ATTEMPTS = 10
 
+# Limit detail requests to models observed missing from the owned inventory.
+_SUBSCRIPTION_LOOKUP_MODELS = frozenset({"3667", "7101"})
 _LOGGER = logging.getLogger(__name__)
 
 CommandValue = TypeVar("CommandValue")
@@ -439,12 +441,10 @@ class HubbleCloudClient:
             for key, camera in cameras.items()
             if camera.model_code == "3667"
         }
-        fallback_ids = dict.fromkeys(
-            (
-                *manual_ids,
-                *(key for key in subscriptions if key[2:6] == "3667"),
-            )
+        subscription_ids = dict.fromkeys(
+            key for key in subscriptions if key[2:6] in _SUBSCRIPTION_LOOKUP_MODELS
         )
+        fallback_ids = dict.fromkeys((*manual_ids, *subscription_ids))
         skipped = sum(
             key not in cameras and key not in fallback_ids for key in subscriptions
         )
@@ -454,6 +454,7 @@ class HubbleCloudClient:
                 "outside supported automatic lookup",
                 skipped,
             )
+        recovered_from_subscriptions = 0
         for key in fallback_ids:
             if key in cameras:
                 continue
@@ -468,7 +469,16 @@ class HubbleCloudClient:
                     raise
                 incomplete = True
             else:
-                cameras[key] = commands[key] = camera
+                cameras[key] = camera
+                if key in manual_ids or camera.model_code == "3667":
+                    commands[key] = camera
+                if key in subscription_ids:
+                    recovered_from_subscriptions += 1
+        if recovered_from_subscriptions:
+            _LOGGER.info(
+                "Hubble cloud individual lookup recovered %d subscription camera(s)",
+                recovered_from_subscriptions,
+            )
         if incomplete:
             _LOGGER.info(
                 "Hubble cloud discovery found %d camera(s) "
