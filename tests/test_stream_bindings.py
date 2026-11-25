@@ -166,6 +166,25 @@ class HubbleStreamBindingTests(unittest.TestCase):
         self.assertEqual(binding.unique_id, f"{spec.host}:camera")
         self.assertEqual(binding.device_identifier, f"camera:{spec.host}")
 
+    def test_0864_stream_selection_depends_on_available_routes(self) -> None:
+        owned = camera(
+            registration_id="AA0864-synthetic-camera", mac_address="02:00:00:00:00:01"
+        )
+        spec = local.HubbleLocalCameraSpec(
+            name="Local camera",
+            host="192.0.2.12",
+            cloud_registration_id=owned.registration_id,
+        )
+
+        (orbweb,) = bindings.build_orbweb_stream_bindings((owned,), (spec,), {}, ())
+        self.assertEqual(orbweb.route_host, spec.host)
+        self.assertEqual(orbweb.target_id, owned.orbweb_sid)
+        self.assertEqual(bindings.build_orbweb_command_bindings((owned,), (spec,)), ())
+        self.assertEqual(
+            bindings.build_orbweb_stream_bindings((owned,), (spec,), {}, {spec.host}),
+            (),
+        )
+
     def test_direct_rtsp_camera_does_not_get_duplicate_cloud_binding(self) -> None:
         spec = local.HubbleLocalCameraSpec(
             name="Nursery",

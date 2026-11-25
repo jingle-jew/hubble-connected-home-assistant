@@ -24,7 +24,7 @@ JOB_POLL_INTERVAL = 2.0
 JOB_POLL_ATTEMPTS = 10
 
 # Limit detail requests to models observed missing from the owned inventory.
-_SUBSCRIPTION_LOOKUP_MODELS = frozenset({"3667", "7101"})
+_SUBSCRIPTION_LOOKUP_MODELS = frozenset({"0864", "3667", "7101"})
 _LOGGER = logging.getLogger(__name__)
 
 CommandValue = TypeVar("CommandValue")

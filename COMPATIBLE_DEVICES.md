@@ -14,6 +14,15 @@ control entities were unavailable in this setup. The cloud inventory returned
 no temperature or Wi-Fi strength.
 [Hardware report](https://github.com/jingle-jew/hubble-connected-home-assistant/issues/4#issuecomment-7111737685) · [Sensor and control tracking](https://github.com/jingle-jew/hubble-connected-home-assistant/issues/6)
 
+## Hubble 0864 (experimental)
+
+For automatic discovery from the subscription list, sign in with the Hubble
+account and leave the optional registration ID field blank. Simulated account
+responses exercise discovery while hardware validation is pending. Home
+Assistant creates a camera entity when it finds a supported video route.
+Live video, sensors, and controls are unverified on this model.
+[Hardware validation tracking](https://github.com/jingle-jew/hubble-connected-home-assistant/issues/8)
+
 ## Motorola credential helper coverage
 
 The [Python credential helper](tools/extract_vm85_credentials.py) targets the

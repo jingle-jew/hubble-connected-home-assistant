@@ -4,6 +4,9 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+- Add experimental automatic discovery for model 0864 cameras listed only in
+  Hubble subscriptions ([#8](https://github.com/jingle-jew/hubble-connected-home-assistant/issues/8)).
+  Live video, sensors, and controls are awaiting hardware validation.
 - Automatically discover model 7101 cameras listed only in Hubble
   subscriptions. Live video depends on an available local video route.
 - Log cloud sign-in outcomes, empty or incomplete camera inventories, and

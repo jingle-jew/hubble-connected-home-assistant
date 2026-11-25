@@ -571,6 +571,127 @@ class HubbleCloudLoggingTests(unittest.IsolatedAsyncioTestCase):
                 ):
                     self.assertNotIn(value, output)
 
+    async def test_two_subscription_only_0864_cameras_are_recovered(self) -> None:
+        first = "AA0864-synthetic-first"
+        second = "AA0864-synthetic-second"
+        token = "private-api-token"
+        orbweb = {"sid": "private-orbweb-sid", "password": "private-orbweb-password"}
+        session = FakeSession(
+            [
+                FakeResponse(200, {"data": {"authentication_token": token}}),
+                FakeResponse(200, {"data": []}),
+                FakeResponse(
+                    200,
+                    {
+                        "data": {
+                            "devices": [
+                                {"registration_id": first},
+                                {"registration_id": second},
+                            ]
+                        }
+                    },
+                ),
+                FakeResponse(
+                    200, {"data": {"registration_id": first, "orbweb": orbweb}}
+                ),
+                FakeResponse(200, {"data": {"registration_id": second}}),
+            ]
+        )
+        client = cloud.HubbleCloudClient(session)
+        with self.assertLogs(cloud.__name__, level="DEBUG") as logs:
+            auth = await client.async_authenticate(
+                "owner@example.com", "private-account-password"
+            )
+            inventory, commands = await client.async_get_account_cameras(
+                auth, (), validate=True
+            )
+
+        self.assertEqual(
+            [camera.registration_id for camera in inventory], [first, second]
+        )
+        self.assertEqual([camera.model_code for camera in inventory], ["0864", "0864"])
+        self.assertTrue(inventory[0].has_orbweb_credentials)
+        self.assertFalse(inventory[1].has_orbweb_credentials)
+        self.assertEqual(commands, ())
+        self.assertEqual(
+            [(method, url) for method, url, _ in session.requests],
+            [
+                ("post", f"{cloud.API_BASE_URL}{cloud.AUTH_PATH}"),
+                ("get", f"{cloud.API_BASE_URL}{cloud.CAMERAS_PATH}"),
+                ("get", f"{cloud.API_BASE_URL}{cloud.SUBSCRIPTIONS_PATH}"),
+                ("get", f"{cloud.API_BASE_URL}/v6/devices/{first}.json"),
+                ("get", f"{cloud.API_BASE_URL}/v6/devices/{second}.json"),
+            ],
+        )
+        for _, _, request in session.requests[1:]:
+            self.assertEqual(request["params"]["api_key"], token)
+        output = "\n".join(logs.output)
+        self.assertIn("owned inventory returned 0 camera(s)", output)
+        self.assertIn("subscription inventory returned 2 camera(s)", output)
+        self.assertIn("individual lookup recovered 2 subscription camera(s)", output)
+        for private_value in (
+            first,
+            second,
+            token,
+            "owner@example.com",
+            "private-account-password",
+            *orbweb.values(),
+        ):
+            self.assertNotIn(private_value, output)
+
+    async def test_failed_0864_lookup_keeps_other_subscription_camera(self) -> None:
+        unavailable = "AA0864-synthetic-unavailable"
+        available = "AA0864-synthetic-available"
+        for response, reason in (
+            (FakeResponse(403, {}), "cloud authentication rejected"),
+            (
+                FakeResponse(200, {"data": {"registration_id": available}}),
+                "invalid cloud response",
+            ),
+        ):
+            with self.subTest(reason=reason):
+                session = FakeSession(
+                    [
+                        FakeResponse(200, {"data": []}),
+                        FakeResponse(
+                            200,
+                            {
+                                "data": {
+                                    "devices": [
+                                        {"registration_id": key}
+                                        for key in (unavailable, unavailable, available)
+                                    ]
+                                }
+                            },
+                        ),
+                        response,
+                        FakeResponse(200, {"data": {"registration_id": available}}),
+                    ]
+                )
+                with self.assertLogs(cloud.__name__, level="DEBUG") as logs:
+                    inventory, commands = await cloud.HubbleCloudClient(
+                        session
+                    ).async_get_account_cameras(
+                        cloud.HubbleCloudSession(token="test-token"), (), validate=True
+                    )
+
+                self.assertEqual(
+                    [camera.registration_id for camera in inventory], [available]
+                )
+                self.assertEqual(commands, ())
+                self.assertEqual(
+                    [url for _, url, _ in session.requests[2:]],
+                    [
+                        f"{cloud.API_BASE_URL}/v6/devices/{unavailable}.json",
+                        f"{cloud.API_BASE_URL}/v6/devices/{available}.json",
+                    ],
+                )
+                output = "\n".join(logs.output)
+                self.assertIn(f"individual camera lookup failed: {reason}", output)
+                self.assertIn("found 1 camera(s) from an incomplete inventory", output)
+                self.assertNotIn(unavailable, output)
+                self.assertNotIn(available, output)
+
     async def test_subscription_lookups_preserve_owned_and_3667_cameras(self) -> None:
         owned = "AA7101-synthetic-owned"
         existing = "AA3667-synthetic-camera"
