@@ -1,0 +1,84 @@
+name: Model Report
+description: "Report a working or partially working camera model."
+title: "[Model Report] "
+labels: ["model-report"]
+body:
+  - type: input
+    id: brand
+    attributes:
+      label: "Camera brand"
+      placeholder: "Motorola, Luvion, etc."
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: "Commercial model"
+      placeholder: "FOCUS 71"
+    validations:
+      required: true
+  - type: input
+    id: model_id
+    attributes:
+      label: "Model ID (if known)"
+      placeholder: "0571"
+    validations:
+      required: false
+  - type: input
+    id: firmware
+    attributes:
+      label: "Firmware version"
+      placeholder: "03.30.52"
+    validations:
+      required: false
+  - type: input
+    id: soc
+    attributes:
+      label: "SoC version"
+      placeholder: "1906_2011"
+    validations:
+      required: false
+  - type: dropdown
+    id: app
+    attributes:
+      label: "Mobile application"
+      options:
+        - "Hubble Connected"
+        - "HubbleClub"
+        - "HubbleClub for Partners"
+        - "Other"
+        - "Unknown"
+    validations:
+      required: false
+  - type: checkboxes
+    id: features
+    attributes:
+      label: Working features
+      description: Select all features that work in Home Assistant.
+      options:
+        - label: "Live video"
+        - label: "Snapshots"
+        - label: "Motion detection"
+        - label: "Sound detection"
+        - label: "Temperature sensor"
+        - label: "Pan / Tilt"
+        - label: "Night vision"
+        - label: "Two-way audio"
+        - label: "Other controls or sensors"
+  - type: textarea
+    id: entities
+    attributes:
+      label: "Exposed Home Assistant entities"
+      description: "List the camera entity and any controls or sensors exposed by the integration."
+  - type: input
+    id: integration_version
+    attributes:
+      label: "Integration version"
+      placeholder: "v0.1.2-beta.2"
+    validations:
+      required: false
+  - type: textarea
+    id: additional
+    attributes:
+      label: "Additional information"
+      description: "Limitations, unsupported features, or observations. Remove any sensitive information."
